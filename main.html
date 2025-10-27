@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="نظام إدارة الحضور الذكي للمتطوعين والمتدربين">
+    <title>حــاضـر| Hader </title>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="website icon" href="websiteicon.jpg">
+    
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="background-overlay"></div>
+    
+    <div class="container">
+        <div class="welcome-screen">
+            <div class="logo-container">
+                <img src="Logo.jpg" alt="Smart Attendance Logo" class="logo-image">
+                <h1 id="welcome-title">حــاضـر</h1>
+                <p class="welcome-subtitle">نظام متقدم لإدارة الحضور والانصراف</p>
+            </div>
+            
+            <div class="action-buttons">
+                <button class="btn btn-primary" onclick="showForm('checkin')">
+                    <i class="fas fa-sign-in-alt"></i> تسجيل حضور
+                </button>
+                <button class="btn btn-secondary" onclick="showForm('checkout')">
+                    <i class="fas fa-sign-out-alt"></i> تسجيل خروج
+                </button>
+                <button class="btn btn-admin" onclick="showForm('admin-login')">
+                    <i class="fas fa-chart-bar"></i> لوحة التحكم
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="form-overlay" id="checkin-overlay">
+        <div class="form-container">
+            <button class="form-close" onclick="hideForm('checkin')">
+                <i class="fas fa-times"></i>
+            </button>
+            
+            <h2 class="form-title">تسجيل حضور</h2>
+            <div class="avatar-container">
+                <div class="avatar">
+                    <i class="fas fa-user-plus"></i>
+                </div>
+            </div>
+            
+            <form id="checkin-form" autocomplete="off">
+                <div class="form-group">
+                    <label for="user-type">النوع</label>
+                    <select id="user-type" required autocomplete="off">
+                        <option value="" disabled selected>اختر النوع</option>
+                        <option value="متطوع">متطوع</option>
+                        <option value="متدرب">متدرب</option>
+                        <option value="تمهير">تمهير</option>
+                    </select>
+                </div>
+                
+                <div class="form-group" id="opportunity-group" style="display: none;">
+                    <label for="opportunity-name">مسمى الفرصة التطوعية</label>
+                    <select id="opportunity-name">
+                        <option value="" disabled selected>اختر الفرصة</option>
+                        </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="checkin-name">الاسم الكامل</label>
+                    <input type="text" id="checkin-name" required placeholder="الاسم الثلاثي" autocomplete="off">
+                </div>
+                
+                <div class="form-group">
+                    <label for="checkin-phone">رقم الجوال</label>
+                    <input type="tel" id="checkin-phone" required placeholder="05XXXXXXXX" autocomplete="off">
+                </div>
+                
+                <button type="submit" class="btn btn-submit">
+                    <i class="fas fa-check-circle"></i> تأكيد الحضور
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="form-overlay" id="checkout-overlay">
+        <div class="form-container">
+            <button class="form-close" onclick="hideForm('checkout')">
+                <i class="fas fa-times"></i>
+            </button>
+            
+            <h2 class="form-title">تسجيل خروج</h2>
+            <div class="avatar-container">
+                <div class="avatar">
+                    <i class="fas fa-user-clock"></i>
+                </div>
+            </div>
+            
+            <form id="checkout-form" autocomplete="off">
+                <div class="form-group">
+                    <label for="checkout-phone">رقم الجوال</label>
+                    <input type="tel" id="checkout-phone" required placeholder="05XXXXXXXX" autocomplete="off">
+                </div>
+                
+                <button type="submit" class="btn btn-submit">
+                    <i class="fas fa-sign-out-alt"></i> تأكيد الخروج
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="form-overlay" id="admin-login-overlay">
+        <div class="form-container">
+            <button class="form-close" onclick="hideForm('admin-login')">
+                <i class="fas fa-times"></i>
+            </button>
+            
+            <h2 class="form-title">تسجيل دخول المدير</h2>
+            <div class="avatar-container">
+                <div class="avatar">
+                    <i class="fas fa-user-shield"></i>
+                </div>
+            </div>
+            
+            <form id="admin-login-form" autocomplete="off">
+                <div class="form-group">
+                    <label for="admin-USERNAME">اسم المستخدم</label>
+                    <input type="text" id="admin-USERNAME" required placeholder="USERNAME" autocomplete="off">
+                </div>
+                
+                <div class="form-group">
+                    <label for="admin-PASSWORD">كلمة المرور</label>
+                    <input type="PASSWORD" id="admin-PASSWORD" required placeholder="PASSWORD" autocomplete="off">
+                </div>
+                
+                <button type="submit" class="btn btn-submit">
+                    <i class="fas fa-sign-in-alt"></i> دخول
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="admin-overlay" id="admin-overlay">
+        <div class="admin-container">
+            <div class="admin-header">
+                <h2 class="admin-title">لوحة التحكم</h2>
+                <button class="admin-close" onclick="hideAdmin()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <div class="category-charts-section">
+                <div class="category-charts-grid">
+                    <div class="category-chart-card volunteers">
+                        <div class="chart-header">
+                            <h4><i class="fas fa-hands-helping"></i> المتطوعين</h4>
+                        </div>
+                        <div class="chart-content">
+                            <div class="chart-stats">
+                                <div class="chart-stat">
+                                    <span class="stat-number" id="volunteers-sessions">0</span>
+                                    <span class="stat-label">إجمالي الحضور</span>
+                                </div>
+                                <div class="chart-stat">
+                                    <span class="stat-number" id="volunteers-total-days">0</span>
+                                    <span class="stat-label">الأيام</span>
+                                </div>
+                                <div class="chart-stat">
+                                    <span class="stat-number" id="volunteers-total-hours">0</span>
+                                    <span class="stat-label">إجمالي الساعات</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="category-chart-card trainees">
+                        <div class="chart-header">
+                            <h4><i class="fas fa-graduation-cap"></i> المتدربين</h4>
+                        </div>
+                        <div class="chart-content">
+                            <div class="chart-stats">
+                                <div class="chart-stat">
+                                    <span class="stat-number" id="trainees-sessions">0</span>
+                                    <span class="stat-label">إجمالي الحضور</span>
+                                </div>
+                                <div class="chart-stat">
+                                    <span class="stat-number" id="trainees-total-days">0</span>
+                                    <span class="stat-label">الأيام</span>
+                                </div>
+                                <div class="chart-stat">
+                                    <span class="stat-number" id="trainees-total-hours">0</span>
+                                    <span class="stat-label">إجمالي الساعات</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="category-chart-card preparatory">
+                        <div class="chart-header">
+                            <h4><i class="fas fa-user-graduate"></i> التمهير</h4>
+                        </div>
+                        <div class="chart-content">
+                            <div class="chart-stats">
+                                <div class="chart-stat">
+                                    <span class="stat-number" id="preparatory-sessions">0</span>
+                                    <span class="stat-label">إجمالي الحضور</span>
+                                </div>
+                                <div class="chart-stat">
+                                    <span class="stat-number" id="preparatory-total-days">0</span>
+                                    <span class="stat-label">الأيام</span>
+                                </div>
+                                <div class="chart-stat">
+                                    <span class="stat-number" id="preparatory-total-hours">0</span>
+                                    <span class="stat-label">إجمالي الساعات</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="controls-section">
+                <div class="controls-grid">
+                    <div class="control-group">
+                        <label for="city-filter">الفرع</label>
+                        <select id="city-filter">
+                            <option value="all">جميع الفروع</option>
+                        </select>
+                    </div>
+                    
+                    <div class="control-group">
+                        <label for="phone-filter">رقم الجوال</label>
+                        <input type="tel" id="phone-filter" placeholder="ابحث برقم الجوال" autocomplete="off">
+                    </div>
+                    
+                    <div class="control-group">
+                        <label for="date-from">من تاريخ</label>
+                        <input type="date" id="date-from">
+                    </div>
+                    
+                    <div class="control-group">
+                        <label for="date-to">إلى تاريخ</label>
+                        <input type="date" id="date-to">
+                    </div>
+                    
+                    <div class="control-group">
+                        <label for="category-filter">فئة التصدير</label>
+                        <select id="category-filter">
+                            <option value="all">جميع الفئات</option>
+                            <option value="متطوع">المتطوعين</option>
+                            <option value="متدرب">المتدربين</option>
+                            <option value="تمهير">التمهير</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="actions-grid">
+                    <button class="btn btn-export" onclick="exportToExcel()">
+                        <i class="fas fa-file-excel"></i> تصدير البيانات Excel
+                    </button>
+                    <button class="btn btn-export" onclick="exportToPDF()">
+                        <i class="fas fa-file-pdf"></i> تصدير البيانات PDF
+                    </button>
+                    <button class="btn btn-export" onclick="exportKPIToExcel()">
+                        <i class="fas fa-chart-bar"></i> تصدير التحليلات Excel
+                    </button>
+                    <button class="btn btn-export" onclick="exportKPIToPDF()">
+                        <i class="fas fa-chart-line"></i> تصدير التحليلات PDF
+                    </button>
+                </div>
+            </div>
+
+            <div class="table-section">
+                <div class="table-header">
+                    <h3>سجلات الحضور والانصراف</h3>
+                </div>
+                <div class="table-container">
+                    <table id="attendance-table">
+                        <thead>
+                            <tr>
+                                <th>الفرع</th>
+                                <th>الاسم</th>
+                                <th>رقم الجوال</th>
+                                <th>النوع</th>
+                                <th>الفرصة التطوعية</th>
+                                <th>وقت الدخول</th>
+                                <th>وقت الخروج</th>
+                                <th>المدة</th>
+                                <th>ملاحظات</th>
+                                <th>الإجراءات</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="alert" id="alert-message"></div>
+
+    <div class="loading-spinner" id="loading-spinner">
+        <div class="spinner"></div>
+    </div>
+
+    <footer class="footer">
+        <div class="footer-content">
+            <p class="copyright">جميع الحقوق محفوظة© <span id="current-year"></span>  |   حــــاضــر  </p>
+            <p class="developer">تطوير: <span>عائشة راشد الشمري | يوسف الأحمر </span></p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
