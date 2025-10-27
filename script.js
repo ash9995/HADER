@@ -31,6 +31,8 @@ const SYSTEM_CONFIG = {
         PASSWORD: 'admin123456'
     },
  
+    // Default data initialization
+    defaultData: [],
     
     // User data storage keys
     storageKeys: {
@@ -65,13 +67,20 @@ document.addEventListener('DOMContentLoaded', function() {
 function initializeApplication() {
     try {
         // Set current year in footer
-        document.getElementById('current-year').textContent = new Date().getFullYear();
+        const yearElement = document.getElementById('current-year');
+        if (yearElement) {
+            yearElement.textContent = new Date().getFullYear();
+        }
         
         // Check if city is selected
         selectedCity = localStorage.getItem(SYSTEM_CONFIG.storageKeys.selectedCity);
         
         if (!selectedCity) {
             console.log('🏢 No city selected - user needs to select from index.html');
+            // If we're on main.html without a city, redirect to index.html
+            if (window.location.pathname.includes('main.html')) {
+                window.location.href = 'index.html';
+            }
             return;
         }
         
@@ -96,7 +105,7 @@ function loadApplicationData() {
     try {
         // Load attendance data
         const storedData = localStorage.getItem(SYSTEM_CONFIG.storageKeys.attendanceData);
-        attendanceData = storedData ? JSON.parse(storedData) : [...SYSTEM_CONFIG.defaultData];
+        attendanceData = storedData ? JSON.parse(storedData) : [];
         
         // Initialize saved users from actual attendance data
         savedUsers = initializeSavedUsersFromData();
@@ -104,8 +113,8 @@ function loadApplicationData() {
         console.log('📊 Data loaded - Attendance records:', attendanceData.length);
     } catch (error) {
         console.error('❌ Error loading data:', error);
-        // Fallback to default data
-        attendanceData = [...SYSTEM_CONFIG.defaultData];
+        // Fallback to empty array
+        attendanceData = [];
         savedUsers = { 'متدرب': [], 'تمهير': [] };
     }
 }
@@ -230,183 +239,209 @@ function setupEventListeners() {
  */
 function handleUserTypeChange() {
     const opportunityGroup = document.getElementById('opportunity-group');
-    const opportunitySelect = document.getElementById('opportunity-name');
+    const userType = document.getElementById('user-type').value;
     
-    if (this.value === 'متطوع') {
+    if (userType === 'متطوع') {
         opportunityGroup.style.display = 'block';
-        opportunitySelect.required = true;
+        document.getElementById('opportunity-name').required = true;
     } else {
         opportunityGroup.style.display = 'none';
-        opportunitySelect.required = false;
-        opportunitySelect.value = ''; // Reset value
+        document.getElementById('opportunity-name').required = false;
     }
 }
 
+/**
+ * Initialize saved users dropdown
+ */
+function initializeSavedUsers() {
+    savedUsers = { 'متدرب': [], 'تمهير': [] };
+}
+
+/**
+ * Populate city filter dropdown in admin panel
+ */
+function populateCityFilter() {
+    const cityFilter = document.getElementById('city-filter');
+    if (!cityFilter) return;
+    
+    // Clear existing options except "All Cities"
+    cityFilter.innerHTML = '<option value="all">جميع الفروع</option>';
+    
+    // Add all configured cities
+    SYSTEM_CONFIG.cities.forEach(city => {
+        const option = document.createElement('option');
+        option.value = city;
+        option.textContent = city;
+        cityFilter.appendChild(option);
+    });
+    
+    // Set current city as selected
+    if (selectedCity) {
+        cityFilter.value = selectedCity;
+    }
+}
+
+/**
+ * Populate volunteer opportunities dropdown
+ */
+function populateOpportunitiesDropdown() {
+    const opportunitySelect = document.getElementById('opportunity-name');
+    if (!opportunitySelect) return;
+    
+    // Clear existing options except default
+    opportunitySelect.innerHTML = '<option value="" disabled selected>اختر الفرصة</option>';
+    
+    // Add all opportunities
+    SYSTEM_CONFIG.volunteerOpportunities.forEach(opportunity => {
+        const option = document.createElement('option');
+        option.value = opportunity;
+        option.textContent = opportunity;
+        opportunitySelect.appendChild(option);
+    });
+}
+
 /* ===============================================
-   FORM MANAGEMENT FUNCTIONS
+   FORM DISPLAY MANAGEMENT
    =============================================== */
 
 /**
- * Show form overlay
+ * Show specific form overlay
  * @param {string} formType - Type of form to show (checkin/checkout/admin-login)
  */
 function showForm(formType) {
-    const overlay = document.getElementById(formType + '-overlay');
-    if (overlay) {
-        overlay.classList.add('active');
-        document.body.style.overflow = 'hidden';
-        
-        // Focus on first input field
+    const overlay = document.getElementById(`${formType}-overlay`);
+    if (!overlay) return;
+    
+    overlay.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    
+    // Focus on first input
+    setTimeout(() => {
         const firstInput = overlay.querySelector('input, select');
-        if (firstInput) {
-            setTimeout(() => firstInput.focus(), 300);
-        }
-        
-        console.log('📝 Form opened:', formType);
-    }
+        if (firstInput) firstInput.focus();
+    }, 100);
+    
+    console.log(`📋 Form opened: ${formType}`);
 }
 
 /**
- * Hide form overlay
- * @param {string} formType - Type of form to hide (checkin/checkout/admin-login)
+ * Hide specific form overlay
+ * @param {string} formType - Type of form to hide
  */
 function hideForm(formType) {
-    const overlay = document.getElementById(formType + '-overlay');
-    if (overlay) {
-        overlay.classList.remove('active');
-        document.body.style.overflow = 'auto';
-        
-        // Reset form
-        const form = overlay.querySelector('form');
-        if (form) form.reset();
-        
-        // Specifically hide conditional fields
-        if (formType === 'checkin') {
-            const opportunityGroup = document.getElementById('opportunity-group');
-            const opportunitySelect = document.getElementById('opportunity-name');
-            if (opportunityGroup) opportunityGroup.style.display = 'none';
-            if (opportunitySelect) opportunitySelect.required = false;
-        }
-        
-        console.log('❌ Form closed:', formType);
+    const overlay = document.getElementById(`${formType}-overlay`);
+    if (!overlay) return;
+    
+    overlay.classList.remove('active');
+    document.body.style.overflow = 'auto';
+    
+    // Reset form
+    const form = overlay.querySelector('form');
+    if (form) form.reset();
+    
+    // Hide opportunity field if visible
+    const opportunityGroup = document.getElementById('opportunity-group');
+    if (opportunityGroup) {
+        opportunityGroup.style.display = 'none';
     }
+    
+    console.log(`📋 Form closed: ${formType}`);
 }
 
 /**
- * Hide admin panel
+ * Show admin dashboard
+ */
+function showAdmin() {
+    const overlay = document.getElementById('admin-overlay');
+    if (!overlay) return;
+    
+    overlay.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    
+    // Update dashboard with latest data
+    updateDashboard();
+    
+    console.log('📊 Admin dashboard opened');
+}
+
+/**
+ * Hide admin dashboard
  */
 function hideAdmin() {
     const overlay = document.getElementById('admin-overlay');
-    if (overlay) {
-        overlay.classList.remove('active');
-        document.body.style.overflow = 'auto';
-        console.log('❌ Admin panel closed');
-    }
-}
-
-/* ===============================================
-   AUTO-COMPLETE FUNCTIONALITY
-   =============================================== */
-
-/**
- * Initialize saved users for faster check-in
- */
-function initializeSavedUsers() {
-    // Ensure saved users structure exists
-    if (!savedUsers['متدرب']) savedUsers['متدرب'] = [];
-    if (!savedUsers['تمهير']) savedUsers['تمهير'] = [];
+    if (!overlay) return;
     
-    console.log('🔄 Saved users initialized');
+    overlay.classList.remove('active');
+    document.body.style.overflow = 'auto';
+    
+    console.log('📊 Admin dashboard closed');
 }
 
 /* ===============================================
-   CHECK-IN/CHECK-OUT PROCESSING
+   FORM SUBMISSION HANDLERS
    =============================================== */
 
 /**
  * Handle check-in form submission
- * @param {Event} event - Form submission event
+ * @param {Event} e - Form submission event
  */
-function handleCheckInSubmission(event) {
-    event.preventDefault();
+function handleCheckInSubmission(e) {
+    e.preventDefault();
     showLoading(true);
     
     try {
-        const formData = getCheckInFormData();
+        const name = document.getElementById('checkin-name').value.trim();
+        const phone = document.getElementById('checkin-phone').value.trim();
+        const type = document.getElementById('user-type').value;
+        const opportunity = type === 'متطوع' ? document.getElementById('opportunity-name').value : '';
         
-        // Validate form data
-        const validation = validateCheckInData(formData);
-        if (!validation.isValid) {
-            showAlert(validation.message, 'error');
-            showLoading(false);
-            return;
+        // Validate phone number
+        if (!validatePhone(phone)) {
+            throw new Error('رقم الجوال غير صحيح');
         }
         
-        // Check for existing check-in
-        if (hasExistingCheckIn(formData.phone)) {
-            showAlert('هذا الرقم مسجل بالفعل اليوم ولم يسجل خروج', 'error');
-            showLoading(false);
-            return;
+        // Check if user already has an active session
+        const activeSession = attendanceData.find(
+            record => record.phone === phone && 
+                     record.city === selectedCity && 
+                     !record.checkOut
+        );
+        
+        if (activeSession) {
+            throw new Error('لديك جلسة حضور مفتوحة بالفعل');
         }
         
-        // Save user for future reference (trainees and preparatory only)
-        if (formData.type === 'متدرب' || formData.type === 'تمهير') {
-            saveUserData(formData);
+        // Create new attendance record
+        const newRecord = {
+            id: generateId(),
+            city: selectedCity,
+            name: name,
+            phone: phone,
+            type: type,
+            opportunity: opportunity,
+            checkIn: getCurrentDateTime(),
+            checkOut: null,
+            duration: null,
+            notes: ''
+        };
+        
+        // Save user data for trainees and preparatory
+        if (type === 'متدرب' || type === 'تمهير') {
+            saveUser(name, phone, type);
         }
         
-        // Create and save new attendance record
-        const newRecord = createAttendanceRecord(formData);
+        // Add to attendance data
         attendanceData.push(newRecord);
         saveApplicationData();
         
-        // Update UI and show success message
+        // Show success message
+        showAlert(`✅ تم تسجيل حضور ${name} بنجاح`, 'success');
         hideForm('checkin');
-        showAlert(`تم تسجيل حضور ${formData.name} بنجاح`);
         
-        console.log('✅ Check-in successful for:', formData.name);
-        
+        console.log('✅ Check-in successful:', newRecord);
     } catch (error) {
         console.error('❌ Check-in error:', error);
-        showAlert('حدث خطأ أثناء تسجيل الحضور', 'error');
-    } finally {
-        showLoading(false);
-    }
-}
-
-/**
- * Handle admin login form submission
- * @param {Event} event - Form submission event
- */
-function handleAdminLoginSubmission(event) {
-    event.preventDefault();
-    showLoading(true);
-    
-    try {
-        const USERNAME = document.getElementById('admin-USERNAME').value;
-        const PASSWORD = document.getElementById('admin-PASSWORD').value;
-        
-        // Check credentials
-        if (USERNAME === SYSTEM_CONFIG.adminCredentials. USERNAME && 
-            PASSWORD === SYSTEM_CONFIG.adminCredentials. PASSWORD) {
-            
-            hideForm('admin-login'); // Hide the login modal
-            
-            // Show the admin dashboard
-            const overlay = document.getElementById('admin-overlay');
-            if (overlay) {
-                overlay.classList.add('active');
-                document.body.style.overflow = 'hidden';
-                updateDashboard(); // Load dashboard data
-                console.log('🔧 Admin panel opened');
-            }
-        } else {
-            showAlert('اسم المستخدم أو كلمة المرور غير صحيحة', 'error');
-            console.log('❌ Invalid credentials');
-        }
-        
-    } catch (error) {
-        console.error('❌ Admin login error:', error);
-        showAlert('حدث خطأ أثناء تسجيل الدخول', 'error');
+        showAlert(error.message, 'error');
     } finally {
         showLoading(false);
     }
@@ -414,394 +449,312 @@ function handleAdminLoginSubmission(event) {
 
 /**
  * Handle check-out form submission
- * @param {Event} event - Form submission event
+ * @param {Event} e - Form submission event
  */
-function handleCheckOutSubmission(event) {
-    event.preventDefault();
+function handleCheckOutSubmission(e) {
+    e.preventDefault();
     showLoading(true);
     
     try {
         const phone = document.getElementById('checkout-phone').value.trim();
         
         // Validate phone number
-        if (!phone) {
-            showAlert('الرجاء إدخال رقم الجوال', 'error');
-            showLoading(false);
-            return;
+        if (!validatePhone(phone)) {
+            throw new Error('رقم الجوال غير صحيح');
         }
         
-        // Find active attendance record
-        const recordIndex = findActiveRecord(phone);
+        // Find active session for this phone number and city
+        const activeSession = attendanceData.find(
+            record => record.phone === phone && 
+                     record.city === selectedCity && 
+                     !record.checkOut
+        );
         
-        if (recordIndex === -1) {
-            showAlert('لا يوجد حضور مسجل لهذا الرقم أو تم تسجيل الخروج مسبقاً', 'error');
-            showLoading(false);
-            return;
+        if (!activeSession) {
+            throw new Error('لا يوجد سجل حضور نشط لهذا الرقم');
         }
         
-        // Update record with check-out time
-        attendanceData[recordIndex].checkOut = getCurrentDateTime();
+        // Update check-out time and duration
+        activeSession.checkOut = getCurrentDateTime();
+        activeSession.duration = calculateDuration(activeSession.checkIn, activeSession.checkOut);
+        
         saveApplicationData();
         
-        // Update UI and show success message
+        // Show success message
+        showAlert(`✅ تم تسجيل خروج ${activeSession.name} بنجاح`, 'success');
         hideForm('checkout');
-        showAlert(`تم تسجيل خروج ${attendanceData[recordIndex].name} بنجاح`);
         
-        console.log('✅ Check-out successful for:', attendanceData[recordIndex].name);
-        
+        console.log('✅ Check-out successful:', activeSession);
     } catch (error) {
         console.error('❌ Check-out error:', error);
-        showAlert('حدث خطأ أثناء تسجيل الخروج', 'error');
+        showAlert(error.message, 'error');
     } finally {
         showLoading(false);
     }
 }
-/**
- * Get check-in form data
- * @returns {Object} Form data object
- */
-function getCheckInFormData() {
-    const userType = document.getElementById('user-type').value;
-    let opportunity = '';
-    
-    if (userType === 'متطوع') {
-        opportunity = document.getElementById('opportunity-name').value;
-    }
-    
-    return {
-        city: selectedCity,
-        name: document.getElementById('checkin-name').value.trim(),
-        phone: document.getElementById('checkin-phone').value.trim(),
-        type: userType,
-        opportunity: opportunity
-    };
-}
 
 /**
- * Check if user already has an active check-in today
- * @param {string} phone - Phone number to check
- * @returns {boolean} True if has existing check-in
+ * Handle admin login form submission
+ * @param {Event} e - Form submission event
  */
-function hasExistingCheckIn(phone) {
-    const today = new Date().toISOString().split('T')[0];
-    return attendanceData.some(record => 
-        record.phone === phone && 
-        record.city === selectedCity &&
-        record.checkIn && 
-        record.checkIn.startsWith(today) && 
-        !record.checkOut
-    );
-}
-
-/**
- * Find active attendance record for today
- * @param {string} phone - Phone number to search
- * @returns {number} Record index or -1 if not found
- */
-function findActiveRecord(phone) {
-    const today = new Date().toISOString().split('T')[0];
-    return attendanceData.findIndex(record => 
-        record.phone === phone && 
-        record.city === selectedCity &&
-        record.checkIn && 
-        record.checkIn.startsWith(today) && 
-        !record.checkOut
-    );
-}
-
-/**
- * Validate check-in data
- * @param {Object} data - Form data to validate
- * @returns {Object} Validation result
- */
-function validateCheckInData(data) {
-    if (!data.name || !data.phone || !data.type) {
-        return { isValid: false, message: 'الرجاء إدخال جميع البيانات المطلوبة' };
-    }
+function handleAdminLoginSubmission(e) {
+    e.preventDefault();
+    showLoading(true);
     
-    // Validate opportunity if user is a volunteer
-    if (data.type === 'متطوع' && !data.opportunity) {
-        return { isValid: false, message: 'الرجاء اختيار مسمى الفرصة التطوعية' };
+    try {
+        const username = document.getElementById('admin-USERNAME').value.trim();
+        const password = document.getElementById('admin-PASSWORD').value;
+        
+        // Validate credentials
+        if (username === SYSTEM_CONFIG.adminCredentials.USERNAME && 
+            password === SYSTEM_CONFIG.adminCredentials.PASSWORD) {
+            
+            hideForm('admin-login');
+            showAdmin();
+            showAlert('مرحباً بك في لوحة التحكم', 'success');
+            
+            console.log('✅ Admin login successful');
+        } else {
+            throw new Error('اسم المستخدم أو كلمة المرور غير صحيحة');
+        }
+    } catch (error) {
+        console.error('❌ Admin login error:', error);
+        showAlert(error.message, 'error');
+    } finally {
+        showLoading(false);
     }
-    
-    if (!/^05\d{8}$/.test(data.phone)) {
-        return { isValid: false, message: 'رقم الجوال يجب أن يبدأ بـ 05 ويتكون من 10 أرقام' };
-    }
-    
-    return { isValid: true };
-}
-
-/**
- * Save user data for future reference
- * @param {Object} formData - User data to save
- */
-function saveUserData(formData) {
-    const userType = formData.type;
-    const existingUser = savedUsers[userType].find(user => user.phone === formData.phone);
-    
-    if (!existingUser) {
-        savedUsers[userType].push({
-            name: formData.name,
-            phone: formData.phone
-        });
-        console.log('💾 User saved for reference:', formData.name);
-    }
-}
-
-/**
- * Create new attendance record
- * @param {Object} formData - Form data
- * @returns {Object} New attendance record
- */
-function createAttendanceRecord(formData) {
-    return {
-        id: attendanceData.length > 0 ? Math.max(...attendanceData.map(r => r.id)) + 1 : 1,
-        city: formData.city,
-        name: formData.name,
-        phone: formData.phone,
-        type: formData.type,
-        opportunity: formData.opportunity || "", // Add opportunity
-        checkIn: getCurrentDateTime(),
-        checkOut: null,
-        notes: ""
-    };
 }
 
 /* ===============================================
-   DASHBOARD UPDATE FUNCTIONS
+   USER DATA MANAGEMENT
    =============================================== */
 
 /**
- * Update entire dashboard including KPIs and table
+ * Save user data for trainees and preparatory
+ * @param {string} name - User name
+ * @param {string} phone - User phone
+ * @param {string} type - User type
+ */
+function saveUser(name, phone, type) {
+    if (!savedUsers[type]) {
+        savedUsers[type] = [];
+    }
+    
+    // Check if user already exists
+    const exists = savedUsers[type].some(user => user.phone === phone);
+    
+    if (!exists) {
+        savedUsers[type].push({ name, phone });
+        console.log(`👤 User saved: ${name} (${type})`);
+    }
+}
+
+/* ===============================================
+   VALIDATION FUNCTIONS
+   =============================================== */
+
+/**
+ * Validate Saudi phone number
+ * @param {string} phone - Phone number to validate
+ * @returns {boolean} True if valid
+ */
+function validatePhone(phone) {
+    // Saudi phone number pattern: starts with 05 and has 10 digits
+    const phoneRegex = /^05\d{8}$/;
+    return phoneRegex.test(phone);
+}
+
+/**
+ * Generate unique ID
+ * @returns {string} Unique identifier
+ */
+function generateId() {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2);
+}
+
+/* ===============================================
+   DASHBOARD & ADMIN PANEL
+   =============================================== */
+
+/**
+ * Update admin dashboard with filtered data
  */
 function updateDashboard() {
-    updateCategoryKPIs();
+    const filteredData = getFilteredData();
+    
+    // Update category statistics
+    updateCategoryStats(filteredData);
+    
+    // Update attendance table
     updateAttendanceTable();
-    console.log('📊 Dashboard updated');
 }
 
 /**
- * Update detailed category KPIs
+ * Get filtered data based on current filter settings
+ * @returns {Array} Filtered attendance data
  */
-function updateCategoryKPIs() {
-    const filteredData = getFilteredAttendanceData();
+function getFilteredData() {
+    let filtered = [...attendanceData];
     
-    // Calculate volunteers KPIs
-    const volunteersData = filteredData.filter(r => r.type === 'متطوع');
-    const volunteersStats = calculateCategoryStats(volunteersData, 'متطوع');
+    // City filter
+    const cityFilter = document.getElementById('city-filter');
+    if (cityFilter && cityFilter.value !== 'all') {
+        filtered = filtered.filter(record => record.city === cityFilter.value);
+    }
     
-    updateKPIElement('volunteers-sessions', volunteersStats.totalSessions);
-    updateKPIElement('volunteers-total-days', volunteersStats.uniqueDays);
-    updateKPIElement('volunteers-total-hours', volunteersStats.totalHours.toFixed(1));
+    // Phone filter
+    const phoneFilter = document.getElementById('phone-filter');
+    if (phoneFilter && phoneFilter.value.trim()) {
+        const searchPhone = phoneFilter.value.trim();
+        filtered = filtered.filter(record => record.phone.includes(searchPhone));
+    }
     
-    // Calculate trainees KPIs
-    const traineesData = filteredData.filter(r => r.type === 'متدرب');
-    const traineesStats = calculateCategoryStats(traineesData, 'متدرب');
+    // Date range filter
+    const dateFrom = document.getElementById('date-from');
+    const dateTo = document.getElementById('date-to');
     
-    updateKPIElement('trainees-sessions', traineesStats.totalSessions);
-    updateKPIElement('trainees-total-days', traineesStats.uniqueDays);
-    updateKPIElement('trainees-total-hours', traineesStats.totalHours.toFixed(1));
+    if (dateFrom && dateFrom.value) {
+        const fromDate = new Date(dateFrom.value);
+        fromDate.setHours(0, 0, 0, 0);
+        filtered = filtered.filter(record => {
+            const recordDate = new Date(record.checkIn);
+            return recordDate >= fromDate;
+        });
+    }
     
-    // Calculate preparatory KPIs
-    const preparatoryData = filteredData.filter(r => r.type === 'تمهير');
-    const preparatoryStats = calculateCategoryStats(preparatoryData, 'تمهير');
+    if (dateTo && dateTo.value) {
+        const toDate = new Date(dateTo.value);
+        toDate.setHours(23, 59, 59, 999);
+        filtered = filtered.filter(record => {
+            const recordDate = new Date(record.checkIn);
+            return recordDate <= toDate;
+        });
+    }
     
-    updateKPIElement('preparatory-sessions', preparatoryStats.totalSessions);
-    updateKPIElement('preparatory-total-days', preparatoryStats.uniqueDays);
-    updateKPIElement('preparatory-total-hours', preparatoryStats.totalHours.toFixed(1));
-    
-    console.log('📈 Category KPIs updated');
+    return filtered;
 }
 
 /**
- * Calculate detailed statistics for a category
- * @param {Array} data - Category data
- * @param {string} type - Category type
- * @returns {Object} Category statistics
+ * Update category statistics in dashboard
+ * @param {Array} data - Filtered attendance data
  */
-function calculateCategoryStats(data, type) {
-    const totalSessions = data.length;
-    const completedSessions = data.filter(r => r.checkOut).length;
-    const totalHours = calculateTotalHours(data);
-    const avgSessionHours = completedSessions > 0 ? (totalHours / completedSessions).toFixed(1) : 0;
+function updateCategoryStats(data) {
+    const stats = {
+        'متطوع': { sessions: 0, totalHours: 0, uniqueDays: new Set() },
+        'متدرب': { sessions: 0, totalHours: 0, uniqueDays: new Set() },
+        'تمهير': { sessions: 0, totalHours: 0, uniqueDays: new Set() }
+    };
     
-    // Calculate unique days
-    const uniqueDaysSet = new Set();
     data.forEach(record => {
-        if (record.checkIn) {
-            uniqueDaysSet.add(record.checkIn.split(' ')[0]);
+        if (record.checkOut && stats[record.type]) {
+            stats[record.type].sessions++;
+            
+            // Calculate hours
+            const hours = calculateHours(record.checkIn, record.checkOut);
+            stats[record.type].totalHours += hours;
+            
+            // Track unique days
+            const day = new Date(record.checkIn).toDateString();
+            stats[record.type].uniqueDays.add(day);
         }
     });
-    const uniqueDays = uniqueDaysSet.size;
     
-    // Calculate completion rate based on expected program duration
-    let completionRate = 0;
-    if (type === 'متدرب' || type === 'تمهير') {
-        // Assuming 6-month program (approximately 180 days)
-        const expectedDays = 180;
-        completionRate = Math.min(Math.round((uniqueDays / expectedDays) * 100), 100);
-    } else if (type === 'متطوع') {
-        // For volunteers, completion rate is based on completed sessions
-        completionRate = totalSessions > 0 ? Math.round((completedSessions / totalSessions) * 100) : 0;
-    }
+    // Update volunteer stats
+    updateStatDisplay('volunteers', stats['متطوع']);
     
-    return {
-        totalSessions,
-        completedSessions,
-        totalHours,
-        avgSessionHours,
-        uniqueDays,
-        completionRate // This is still calculated but just not displayed for trainees/preparatory
-    };
+    // Update trainee stats
+    updateStatDisplay('trainees', stats['متدرب']);
+    
+    // Update preparatory stats
+    updateStatDisplay('preparatory', stats['تمهير']);
 }
 
 /**
- * Update KPI element
- * @param {string} elementId - Element ID
- * @param {string|number} value - Value to display
+ * Update stat display for a category
+ * @param {string} category - Category name (volunteers/trainees/preparatory)
+ * @param {Object} stat - Statistics object
  */
-function updateKPIElement(elementId, value) {
-    const element = document.getElementById(elementId);
-    if (element) {
-        element.textContent = value;
-    }
-}
-
-/* ===============================================
-   CALCULATION FUNCTIONS
-   =============================================== */
-
-/**
- * Calculate total hours for all records
- * @param {Array} records - All records
- * @returns {number} Total hours
- */
-function calculateTotalHours(records) {
-    const completedRecords = records.filter(r => r.checkOut);
-    const totalHours = completedRecords.reduce((sum, record) => {
-        return sum + calculateSessionHours(record.checkIn, record.checkOut);
-    }, 0);
+function updateStatDisplay(category, stat) {
+    const sessionsEl = document.getElementById(`${category}-sessions`);
+    const daysEl = document.getElementById(`${category}-total-days`);
+    const hoursEl = document.getElementById(`${category}-total-hours`);
     
-    return Math.round(totalHours);
+    if (sessionsEl) sessionsEl.textContent = stat.sessions;
+    if (daysEl) daysEl.textContent = stat.uniqueDays.size;
+    if (hoursEl) hoursEl.textContent = stat.totalHours.toFixed(1);
 }
 
 /**
- * Calculate session hours between check-in and check-out
- * @param {string} checkIn - Check-in datetime string
- * @param {string} checkOut - Check-out datetime string
- * @returns {number} Hours between check-in and check-out
+ * Calculate hours between two datetime strings
+ * @param {string} checkIn - Check-in datetime
+ * @param {string} checkOut - Check-out datetime
+ * @returns {number} Hours
  */
-function calculateSessionHours(checkIn, checkOut) {
-    if (!checkOut) return 0;
-    
+function calculateHours(checkIn, checkOut) {
     const checkInTime = new Date(checkIn);
     const checkOutTime = new Date(checkOut);
     const diffMs = checkOutTime - checkInTime;
-    
-    return diffMs / (1000 * 60 * 60); // Convert to hours
+    return diffMs / (1000 * 60 * 60);
 }
-
-/* ===============================================
-   DATA FILTERING FUNCTIONS
-   =============================================== */
-
-/**
- * Get filtered attendance data based on current filters
- * @returns {Array} Filtered attendance data
- */
-function getFilteredAttendanceData() {
-    const cityFilter = document.getElementById('city-filter')?.value || 'all';
-    const phoneFilter = document.getElementById('phone-filter')?.value.trim() || '';
-    const dateFrom = document.getElementById('date-from')?.value || '';
-    const dateTo = document.getElementById('date-to')?.value || '';
-    
-    let filteredData = attendanceData;
-    
-    // Filter by city
-    if (cityFilter !== 'all') {
-        filteredData = filteredData.filter(record => record.city === cityFilter);
-    }
-    
-    // Filter by phone number
-    if (phoneFilter) {
-        filteredData = filteredData.filter(record => 
-            record.phone.includes(phoneFilter)
-        );
-    }
-    
-    // Filter by date range
-    if (dateFrom || dateTo) {
-        filteredData = filteredData.filter(record => {
-            if (!record.checkIn) return false;
-            const recordDate = record.checkIn.split(' ')[0];
-            
-            if (dateFrom && dateTo) {
-                return recordDate >= dateFrom && recordDate <= dateTo;
-            } else if (dateFrom) {
-                return recordDate >= dateFrom;
-            } else if (dateTo) {
-                return recordDate <= dateTo;
-            }
-            return true;
-        });
-    }
-    
-    return filteredData;
-}
-/* ===============================================
-   TABLE MANAGEMENT FUNCTIONS
-   =============================================== */
 
 /**
  * Update attendance table
  */
 function updateAttendanceTable() {
-    const filteredData = getFilteredAttendanceData();
-    const categoryFilter = document.getElementById('category-filter')?.value || 'all';
+    const tbody = document.querySelector('#attendance-table tbody');
+    if (!tbody) return;
     
-    let displayData = filteredData;
-    if (categoryFilter !== 'all') {
-        displayData = filteredData.filter(record => record.type === categoryFilter);
+    // Clear existing rows
+    tbody.innerHTML = '';
+    
+    // Get filtered data
+    let filteredData = getFilteredData();
+    
+    // Apply category filter
+    const categoryFilter = document.getElementById('category-filter');
+    if (categoryFilter && categoryFilter.value !== 'all') {
+        filteredData = filteredData.filter(record => record.type === categoryFilter.value);
     }
     
-    const tableBody = document.querySelector('#attendance-table tbody');
-    if (!tableBody) return;
+    // Sort by check-in time (most recent first)
+    filteredData.sort((a, b) => new Date(b.checkIn) - new Date(a.checkIn));
     
-    tableBody.innerHTML = '';
-    
-    // Sort by check-in time (newest first)
-    displayData.sort((a, b) => new Date(b.checkIn) - new Date(a.checkIn));
-    
-    displayData.forEach(record => {
+    // Populate table
+    filteredData.forEach(record => {
         const row = createTableRow(record);
-        tableBody.appendChild(row);
+        tbody.appendChild(row);
     });
     
-    console.log('📋 Table updated with', displayData.length, 'records');
+    console.log('📋 Table updated with', filteredData.length, 'records');
 }
 
 /**
- * Create table row element
+ * Create table row for attendance record
  * @param {Object} record - Attendance record
  * @returns {HTMLElement} Table row element
  */
 function createTableRow(record) {
     const row = document.createElement('tr');
     
-    const opportunityCell = record.type === 'متطوع' ? (record.opportunity || '—') : '—';
+    // Determine status class
+    let statusClass = '';
+    if (!record.checkOut) {
+        statusClass = 'status-active';
+    }
     
+    row.className = statusClass;
     row.innerHTML = `
         <td>${record.city}</td>
         <td>${record.name}</td>
         <td>${record.phone}</td>
-        <td>${record.type}</td>
-        <td>${opportunityCell}</td>
+        <td><span class="badge badge-${record.type}">${record.type}</span></td>
+        <td>${record.opportunity || '-'}</td>
         <td>${formatDateTime(record.checkIn)}</td>
-        <td>${record.checkOut ? formatDateTime(record.checkOut) : 'لم يخرج بعد'}</td>
-        <td>${calculateDuration(record.checkIn, record.checkOut)}</td>
-        <td contenteditable="true" onfocusout="updateNotes(${record.id}, this.textContent)">${record.notes || ''}</td>
+        <td>${record.checkOut ? formatDateTime(record.checkOut) : '<span class="status-badge active">نشط</span>'}</td>
+        <td>${record.duration || 'لم يخرج بعد'}</td>
+        <td><input type="text" value="${record.notes || ''}" onchange="updateNotes('${record.id}', this.value)" placeholder="أضف ملاحظة"></td>
         <td>
-            <button class="btn btn-reset" onclick="deleteRecord(${record.id})" style="padding: 8px 12px; font-size: 0.9rem; min-width: auto;">
+            <button class="btn-icon btn-delete" onclick="deleteRecord('${record.id}')" title="حذف">
                 <i class="fas fa-trash"></i>
             </button>
         </td>
@@ -812,73 +765,36 @@ function createTableRow(record) {
 
 /**
  * Update notes for a record
- * @param {number} id - Record ID
- * @param {string} notes - New notes text
+ * @param {string} id - Record ID
+ * @param {string} notes - New notes
  */
 function updateNotes(id, notes) {
     const record = attendanceData.find(r => r.id === id);
     if (record) {
-        record.notes = notes.trim();
+        record.notes = notes;
         saveApplicationData();
         console.log('📝 Notes updated for record:', id);
     }
 }
 
 /**
- * Delete specific record
- * @param {number} id - Record ID to delete
+ * Delete attendance record
+ * @param {string} id - Record ID
  */
 function deleteRecord(id) {
-    if (confirm('هل أنت متأكد من حذف هذا السجل؟')) {
-        const recordIndex = attendanceData.findIndex(record => record.id === id);
-        if (recordIndex !== -1) {
-            const deletedRecord = attendanceData[recordIndex];
-            attendanceData.splice(recordIndex, 1);
-            saveApplicationData();
-            updateDashboard();
-            showAlert('تم حذف السجل بنجاح', 'success');
-            console.log('🗑️ Record deleted:', deletedRecord.name);
-        }
+    if (!confirm('هل أنت متأكد من حذف هذا السجل؟')) {
+        return;
     }
-}
-
-/**
- * Populate city filter dropdown
- */
-function populateCityFilter() {
-    const cityFilter = document.getElementById('city-filter');
-    if (!cityFilter) return;
     
-    cityFilter.innerHTML = '<option value="all">جميع الفروع</option>';
-    
-    SYSTEM_CONFIG.cities.forEach(city => {
-        const option = document.createElement('option');
-        option.value = city;
-        option.textContent = city;
-        cityFilter.appendChild(option);
-    });
-    
-    console.log('🏢 City filter populated');
-}
-
-/**
- * Populate volunteer opportunities dropdown
- */
-function populateOpportunitiesDropdown() {
-    const opportunitySelect = document.getElementById('opportunity-name');
-    if (!opportunitySelect) return;
-    
-    // Clear existing options except the first one
-    opportunitySelect.innerHTML = '<option value="" disabled selected>اختر الفرصة</option>';
-    
-    SYSTEM_CONFIG.volunteerOpportunities.forEach(opportunity => {
-        const option = document.createElement('option');
-        option.value = opportunity;
-        option.textContent = opportunity;
-        opportunitySelect.appendChild(option);
-    });
-    
-    console.log('👷 Volunteer opportunities populated');
+    const index = attendanceData.findIndex(r => r.id === id);
+    if (index !== -1) {
+        const record = attendanceData[index];
+        attendanceData.splice(index, 1);
+        saveApplicationData();
+        updateDashboard();
+        showAlert(`تم حذف سجل ${record.name}`, 'success');
+        console.log('🗑️ Record deleted:', id);
+    }
 }
 
 /* ===============================================
@@ -886,47 +802,41 @@ function populateOpportunitiesDropdown() {
    =============================================== */
 
 /**
- * Export data to Excel (CSV format)
+ * Export data to Excel
  */
 function exportToExcel() {
-    showLoading(true);
-    
     try {
-        const categoryFilter = document.getElementById('category-filter')?.value || 'all';
-        const filteredData = getFilteredAttendanceData();
+        showLoading(true);
         
-        let exportData = filteredData;
-        if (categoryFilter !== 'all') {
-            exportData = filteredData.filter(record => record.type === categoryFilter);
+        const filteredData = getFilteredData();
+        
+        // Apply category filter
+        const categoryFilter = document.getElementById('category-filter');
+        let dataToExport = filteredData;
+        if (categoryFilter && categoryFilter.value !== 'all') {
+            dataToExport = filteredData.filter(record => record.type === categoryFilter.value);
         }
         
-        // Create CSV header
-        const header = ['الفرع', 'الاسم', 'رقم الجوال', 'النوع', 'الفرصة التطوعية', 'وقت الدخول', 'وقت الخروج', 'المدة', 'ملاحظات'];
+        if (dataToExport.length === 0) {
+            throw new Error('لا توجد بيانات للتصدير');
+        }
         
-        // Create CSV rows
-        const rows = exportData.map(record => [
-            record.city,
-            record.name,
-            record.phone,
-            record.type,
-            record.opportunity || '',
-            formatDateTime(record.checkIn),
-            record.checkOut ? formatDateTime(record.checkOut) : 'لم يخرج بعد',
-            calculateDuration(record.checkIn, record.checkOut),
-            record.notes || ''
-        ]);
+        // Create CSV content
+        let csv = '\uFEFF'; // UTF-8 BOM for Excel compatibility
+        csv += 'الفرع,الاسم,رقم الجوال,النوع,الفرصة التطوعية,وقت الدخول,وقت الخروج,المدة,ملاحظات\n';
         
-        // Combine header and rows
-        const csvContent = [header, ...rows]
-            .map(row => row.join(','))
-            .join('\n');
+        dataToExport.forEach(record => {
+            csv += `"${record.city}","${record.name}","${record.phone}","${record.type}","${record.opportunity || '-'}","${formatDateTime(record.checkIn)}","${record.checkOut ? formatDateTime(record.checkOut) : 'لم يخرج بعد'}","${record.duration || '-'}","${record.notes || ''}"\n`;
+        });
         
         // Download file
-        downloadCSVFile(csvContent, 'attendance_data');
-        showAlert('تم تصدير البيانات بنجاح');
+        downloadFile(csv, 'attendance-data.csv', 'text/csv;charset=utf-8;');
+        
+        showAlert('تم تصدير البيانات بنجاح', 'success');
+        console.log('📊 Data exported to Excel');
     } catch (error) {
         console.error('❌ Export error:', error);
-        showAlert('حدث خطأ في تصدير البيانات', 'error');
+        showAlert(error.message, 'error');
     } finally {
         showLoading(false);
     }
@@ -936,199 +846,233 @@ function exportToExcel() {
  * Export data to PDF
  */
 function exportToPDF() {
-    showLoading(true);
-    
     try {
-        const categoryFilter = document.getElementById('category-filter')?.value || 'all';
-        const filteredData = getFilteredAttendanceData();
+        showLoading(true);
         
-        let exportData = filteredData;
-        if (categoryFilter !== 'all') {
-            exportData = filteredData.filter(record => record.type === categoryFilter);
+        const filteredData = getFilteredData();
+        
+        // Apply category filter
+        const categoryFilter = document.getElementById('category-filter');
+        let dataToExport = filteredData;
+        if (categoryFilter && categoryFilter.value !== 'all') {
+            dataToExport = filteredData.filter(record => record.type === categoryFilter.value);
         }
         
-        // Generate PDF HTML content
-        const htmlContent = generatePDFHTML(exportData);
+        if (dataToExport.length === 0) {
+            throw new Error('لا توجد بيانات للتصدير');
+        }
         
-        // Create and download HTML file (PDF functionality would require additional library)
-        const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
+        // Generate HTML content for PDF
+        const htmlContent = generatePDFContent(dataToExport);
         
-        link.href = url;
-        link.download = `تقرير_الحضور_${new Date().toISOString().split('T')[0]}.html`;
-        document.body.appendChild(link);
-        link.click();
+        // Create a new window and print
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(htmlContent);
+        printWindow.document.close();
         
         setTimeout(() => {
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-        }, 100);
+            printWindow.print();
+        }, 500);
         
-        showAlert('تم إنشاء التقرير بنجاح');
+        showAlert('جاري تجهيز ملف PDF', 'success');
+        console.log('📄 PDF export initiated');
     } catch (error) {
         console.error('❌ PDF export error:', error);
-        showAlert('حدث خطأ في إنشاء التقرير', 'error');
+        showAlert(error.message, 'error');
     } finally {
         showLoading(false);
     }
 }
 
 /**
- * Export KPIs to Excel
+ * Export KPI data to Excel
  */
 function exportKPIToExcel() {
-    showLoading(true);
-    
     try {
-        const filteredData = getFilteredAttendanceData();
+        showLoading(true);
         
-        // Calculate KPIs for each category
-        const volunteersData = filteredData.filter(r => r.type === 'متطوع');
-        const traineesData = filteredData.filter(r => r.type === 'متدرب');
-        const preparatoryData = filteredData.filter(r => r.type === 'تمهير');
+        const filteredData = getFilteredData();
+        const stats = calculateDetailedStats(filteredData);
         
-        const volunteersStats = calculateCategoryStats(volunteersData, 'متطوع');
-        const traineesStats = calculateCategoryStats(traineesData, 'متدرب');
-        const preparatoryStats = calculateCategoryStats(preparatoryData, 'تمهير');
+        // Create CSV content
+        let csv = '\uFEFF'; // UTF-8 BOM
+        csv += 'تقرير التحليلات - نظام الحضور الذكي\n\n';
         
-        // Create CSV header
-        const header = ['الفئة', 'إجمالي الجلسات', 'الجلسات المكتملة', 'إجمالي الساعات', 'متوسط الجلسة', 'الأيام الفريدة', 'نسبة الإنجاز', 'المستخدمين النشطين'];
+        // Volunteers
+        csv += 'المتطوعين\n';
+        csv += 'المؤشر,القيمة\n';
+        csv += `إجمالي الحضور,${stats.volunteers.totalSessions}\n`;
+        csv += `الجلسات المكتملة,${stats.volunteers.completedSessions}\n`;
+        csv += `إجمالي الساعات,${stats.volunteers.totalHours.toFixed(1)}\n`;
+        csv += `متوسط الجلسة,${stats.volunteers.avgSessionHours}\n`;
+        csv += `الأيام الفريدة,${stats.volunteers.uniqueDays}\n`;
+        csv += `نسبة الإنجاز,${stats.volunteers.completionRate}%\n\n`;
         
-        // Create CSV rows
-        const rows = [
-            ['المتطوعين', volunteersStats.totalSessions, volunteersStats.completedSessions, 
-             volunteersStats.totalHours.toFixed(1), volunteersStats.avgSessionHours, 
-             volunteersStats.uniqueDays, volunteersStats.completionRate + '%', volunteersData.length],
-            ['المتدربين', traineesStats.totalSessions, traineesStats.completedSessions, 
-             traineesStats.totalHours.toFixed(1), traineesStats.avgSessionHours, 
-             traineesStats.uniqueDays, traineesStats.completionRate + '%', traineesData.length],
-            ['التمهير', preparatoryStats.totalSessions, preparatoryStats.completedSessions, 
-             preparatoryStats.totalHours.toFixed(1), preparatoryStats.avgSessionHours, 
-             preparatoryStats.uniqueDays, preparatoryStats.completionRate + '%', preparatoryData.length]
-        ];
+        // Trainees
+        csv += 'المتدربين\n';
+        csv += 'المؤشر,القيمة\n';
+        csv += `إجمالي الحضور,${stats.trainees.totalSessions}\n`;
+        csv += `الجلسات المكتملة,${stats.trainees.completedSessions}\n`;
+        csv += `إجمالي الساعات,${stats.trainees.totalHours.toFixed(1)}\n`;
+        csv += `متوسط الجلسة,${stats.trainees.avgSessionHours}\n`;
+        csv += `الأيام الفريدة,${stats.trainees.uniqueDays}\n`;
+        csv += `نسبة الإنجاز,${stats.trainees.completionRate}%\n\n`;
         
-        // Combine header and rows
-        const csvContent = [header, ...rows]
-            .map(row => row.join(','))
-            .join('\n');
+        // Preparatory
+        csv += 'التمهير\n';
+        csv += 'المؤشر,القيمة\n';
+        csv += `إجمالي الحضور,${stats.preparatory.totalSessions}\n`;
+        csv += `الجلسات المكتملة,${stats.preparatory.completedSessions}\n`;
+        csv += `إجمالي الساعات,${stats.preparatory.totalHours.toFixed(1)}\n`;
+        csv += `متوسط الجلسة,${stats.preparatory.avgSessionHours}\n`;
+        csv += `الأيام الفريدة,${stats.preparatory.uniqueDays}\n`;
+        csv += `نسبة الإنجاز,${stats.preparatory.completionRate}%\n`;
         
         // Download file
-        downloadCSVFile(csvContent, 'kpi_analytics');
-        showAlert('تم تصدير التحليلات بنجاح');
+        downloadFile(csv, 'kpi-analytics.csv', 'text/csv;charset=utf-8;');
+        
+        showAlert('تم تصدير التحليلات بنجاح', 'success');
+        console.log('📊 KPI exported to Excel');
     } catch (error) {
         console.error('❌ KPI export error:', error);
-        showAlert('حدث خطأ في تصدير التحليلات', 'error');
+        showAlert(error.message, 'error');
     } finally {
         showLoading(false);
     }
 }
 
 /**
- * Export KPIs to PDF
+ * Export KPI data to PDF
  */
 function exportKPIToPDF() {
-    showLoading(true);
-    
     try {
-        const filteredData = getFilteredAttendanceData();
+        showLoading(true);
         
-        // Calculate KPIs for each category
-        const volunteersData = filteredData.filter(r => r.type === 'متطوع');
-        const traineesData = filteredData.filter(r => r.type === 'متدرب');
-        const preparatoryData = filteredData.filter(r => r.type === 'تمهير');
+        const filteredData = getFilteredData();
+        const stats = calculateDetailedStats(filteredData);
         
-        const volunteersStats = calculateCategoryStats(volunteersData, 'متطوع');
-        const traineesStats = calculateCategoryStats(traineesData, 'متدرب');
-        const preparatoryStats = calculateCategoryStats(preparatoryData, 'تمهير');
+        // Generate HTML content for KPI PDF
+        const htmlContent = generateKPIPDFContent(stats);
         
-        // Generate PDF HTML content
-        const htmlContent = generateKPIPDFHTML(volunteersStats, traineesStats, preparatoryStats);
-        
-        // Create and download HTML file
-        const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        
-        link.href = url;
-        link.download = `تحليلات_المؤشرات_${new Date().toISOString().split('T')[0]}.html`;
-        document.body.appendChild(link);
-        link.click();
+        // Create a new window and print
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(htmlContent);
+        printWindow.document.close();
         
         setTimeout(() => {
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-        }, 100);
+            printWindow.print();
+        }, 500);
         
-        showAlert('تم إنشاء تقرير التحليلات بنجاح');
+        showAlert('جاري تجهيز تقرير التحليلات', 'success');
+        console.log('📄 KPI PDF export initiated');
     } catch (error) {
         console.error('❌ KPI PDF export error:', error);
-        showAlert('حدث خطأ في إنشاء تقرير التحليلات', 'error');
+        showAlert(error.message, 'error');
     } finally {
         showLoading(false);
     }
 }
 
 /**
- * Download CSV file
- * @param {string} csv - CSV content
- * @param {string} filename - Base filename
+ * Calculate detailed statistics for KPI
+ * @param {Array} data - Filtered attendance data
+ * @returns {Object} Statistics object
  */
-function downloadCSVFile(csv, filename) {
-    const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
+function calculateDetailedStats(data) {
+    const stats = {
+        volunteers: { totalSessions: 0, completedSessions: 0, totalHours: 0, uniqueDays: new Set(), avgSessionHours: 0, completionRate: 0 },
+        trainees: { totalSessions: 0, completedSessions: 0, totalHours: 0, uniqueDays: new Set(), avgSessionHours: 0, completionRate: 0 },
+        preparatory: { totalSessions: 0, completedSessions: 0, totalHours: 0, uniqueDays: new Set(), avgSessionHours: 0, completionRate: 0 }
+    };
     
-    link.href = url;
-    link.download = `${filename}_${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(link);
-    link.click();
+    const typeMap = {
+        'متطوع': 'volunteers',
+        'متدرب': 'trainees',
+        'تمهير': 'preparatory'
+    };
     
-    setTimeout(() => {
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-    }, 100);
+    data.forEach(record => {
+        const category = typeMap[record.type];
+        if (!category) return;
+        
+        stats[category].totalSessions++;
+        
+        if (record.checkOut) {
+            stats[category].completedSessions++;
+            const hours = calculateHours(record.checkIn, record.checkOut);
+            stats[category].totalHours += hours;
+            
+            const day = new Date(record.checkIn).toDateString();
+            stats[category].uniqueDays.add(day);
+        }
+    });
+    
+    // Calculate averages and completion rates
+    Object.keys(stats).forEach(category => {
+        const cat = stats[category];
+        cat.avgSessionHours = cat.completedSessions > 0 
+            ? (cat.totalHours / cat.completedSessions).toFixed(1) 
+            : 0;
+        cat.completionRate = cat.totalSessions > 0 
+            ? Math.round((cat.completedSessions / cat.totalSessions) * 100) 
+            : 0;
+        cat.uniqueDays = cat.uniqueDays.size;
+    });
+    
+    return stats;
 }
 
 /**
- * Generate PDF HTML content for attendance data
- * @param {Array} data - Attendance data
+ * Download file helper function
+ * @param {string} content - File content
+ * @param {string} filename - File name
+ * @param {string} mimeType - MIME type
+ */
+function downloadFile(content, filename, mimeType) {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+/**
+ * Generate PDF HTML content
+ * @param {Array} data - Data to include in PDF
  * @returns {string} HTML content
  */
-function generatePDFHTML(data) {
-    const tableRows = data.map(record => `
-        <tr>
-            <td>${record.city}</td>
-            <td>${record.name}</td>
-            <td>${record.phone}</td>
-            <td>${record.type}</td>
-            <td>${record.opportunity || '—'}</td>
-            <td>${formatDateTime(record.checkIn)}</td>
-            <td>${record.checkOut ? formatDateTime(record.checkOut) : 'لم يخرج بعد'}</td>
-            <td>${calculateDuration(record.checkIn, record.checkOut)}</td>
-            <td>${record.notes || ''}</td>
-        </tr>
-    `).join('');
-    
+function generatePDFContent(data) {
     return `
         <!DOCTYPE html>
         <html lang="ar" dir="rtl">
         <head>
             <meta charset="UTF-8">
-            <title>تقرير الحضور والانصراف</title>
+            <title>تقرير الحضور</title>
             <style>
-                body { font-family: Arial, sans-serif; direction: rtl; padding: 20px; }
-                h1 { color: #333; text-align: center; }
+                @page { size: A4 landscape; margin: 10mm; }
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body { font-family: 'Arial', sans-serif; direction: rtl; padding: 20px; }
+                .header { text-align: center; margin-bottom: 20px; border-bottom: 3px solid #36E39B; padding-bottom: 10px; }
+                .header h1 { color: #333; margin-bottom: 5px; }
+                .header p { color: #666; font-size: 14px; }
                 table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-                th, td { border: 1px solid #ddd; padding: 10px; text-align: right; }
-                th { background-color: #546B68; color: white; }
-                tr:nth-child(even) { background-color: #f2f2f2; }
-                .footer { margin-top: 30px; text-align: center; color: #666; font-size: 12px; }
+                th { background: #36E39B; color: #000; padding: 10px; font-weight: bold; border: 1px solid #ddd; }
+                td { padding: 8px; border: 1px solid #ddd; text-align: center; }
+                tr:nth-child(even) { background: #f9f9f9; }
+                .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #666; border-top: 2px solid #ddd; padding-top: 10px; }
             </style>
         </head>
         <body>
-            <h1>تقرير الحضور والانصراف</h1>
-            <p>تاريخ التقرير: ${new Date().toLocaleDateString('ar-SA')}</p>
+            <div class="header">
+                <h1>تقرير الحضور والانصراف</h1>
+                <p>نظام الحضور الذكي | حــاضــر</p>
+                <p>تاريخ التقرير: ${new Date().toLocaleDateString('ar-SA')}</p>
+            </div>
+            
             <table>
                 <thead>
                     <tr>
@@ -1144,11 +1088,25 @@ function generatePDFHTML(data) {
                     </tr>
                 </thead>
                 <tbody>
-                    ${tableRows}
+                    ${data.map(record => `
+                        <tr>
+                            <td>${record.city}</td>
+                            <td>${record.name}</td>
+                            <td>${record.phone}</td>
+                            <td>${record.type}</td>
+                            <td>${record.opportunity || '-'}</td>
+                            <td>${formatDateTime(record.checkIn)}</td>
+                            <td>${record.checkOut ? formatDateTime(record.checkOut) : 'لم يخرج بعد'}</td>
+                            <td>${record.duration || '-'}</td>
+                            <td>${record.notes || '-'}</td>
+                        </tr>
+                    `).join('')}
                 </tbody>
             </table>
+            
             <div class="footer">
-                <p>تم إنشاء التقرير بواسطة نظام الحضور الذكي | حــاضــر</p>
+                <p><strong>تم إنشاء التقرير بواسطة نظام الحضور الذكي | حــاضــر</strong></p>
+                <p>تطوير: عائشة راشد الشمري | يوسف الأحمر</p>
                 <p>© ${new Date().getFullYear()} جميع الحقوق محفوظة</p>
             </div>
         </body>
@@ -1158,194 +1116,50 @@ function generatePDFHTML(data) {
 
 /**
  * Generate KPI PDF HTML content
- * @param {Object} volunteersStats - Volunteers statistics
- * @param {Object} traineesStats - Trainees statistics
- * @param {Object} preparatoryStats - Preparatory statistics
+ * @param {Object} stats - Statistics data
  * @returns {string} HTML content
  */
-function generateKPIPDFHTML(volunteersStats, traineesStats, preparatoryStats) {
-    // Get filter information for display
-    const cityFilter = document.getElementById('city-filter')?.value || 'all';
-    const phoneFilter = document.getElementById('phone-filter')?.value.trim() || '';
-    const dateFrom = document.getElementById('date-from')?.value || '';
-    const dateTo = document.getElementById('date-to')?.value || '';
-    
-    let filterInfo = '<p style="color: #666; margin-bottom: 20px;">';
-    if (cityFilter !== 'all') {
-        filterInfo += `<strong>الفرع:</strong> ${cityFilter} | `;
-    }
-    if (phoneFilter) {
-        filterInfo += `<strong>رقم الجوال:</strong> ${phoneFilter} | `;
-    }
-    if (dateFrom) {
-        filterInfo += `<strong>من تاريخ:</strong> ${dateFrom} | `;
-    }
-    if (dateTo) {
-        filterInfo += `<strong>إلى تاريخ:</strong> ${dateTo}`;
-    }
-    if (filterInfo === '<p style="color: #666; margin-bottom: 20px;">') {
-        filterInfo += '<strong>الفلتر:</strong> جميع السجلات';
-    }
-    filterInfo += '</p>';
+function generateKPIPDFContent(stats) {
+    const volunteersStats = stats.volunteers;
+    const traineesStats = stats.trainees;
+    const preparatoryStats = stats.preparatory;
     
     return `
         <!DOCTYPE html>
         <html lang="ar" dir="rtl">
         <head>
             <meta charset="UTF-8">
-            <title>تقرير مؤشرات الأداء (KPIs)</title>
+            <title>تقرير التحليلات</title>
             <style>
-                * {
-                    margin: 0;
-                    padding: 0;
-                    box-sizing: border-box;
-                }
-                
-                body { 
-                    font-family: Arial, sans-serif; 
-                    direction: rtl; 
-                    padding: 30px;
-                    background: #F0F0F0;
-                }
-                
-                .header {
-                    text-align: center;
-                    background: white;
-                    padding: 30px;
-                    border-radius: 10px;
-                    margin-bottom: 30px;
-                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                }
-                
-                h1 { 
-                    color: #333; 
-                    margin-bottom: 15px;
-                    font-size: 32px;
-                }
-                
-                .date-info {
-                    color: #666;
-                    font-size: 16px;
-                    margin-top: 10px;
-                }
-                
-                .kpi-grid {
-                    display: grid;
-                    grid-template-columns: repeat(3, 1fr);
-                    gap: 20px;
-                    margin-bottom: 30px;
-                }
-                
-                .kpi-card {
-                    background: white;
-                    padding: 25px;
-                    border-radius: 10px;
-                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                    text-align: center;
-                    border-right: 5px solid #333;
-                }
-                
-                .kpi-card.volunteers {
-                    border-right-color: #96BCB7;
-                }
-                
-                .kpi-card.trainees {
-                    border-right-color: #44556A;
-                }
-                
-                .kpi-card.preparatory {
-                    border-right-color: #E87853;
-                }
-                
-                .kpi-icon {
-                    font-size: 40px;
-                    margin-bottom: 15px;
-                }
-                
-                .kpi-card.volunteers .kpi-icon { color: #96BCB7; }
-                .kpi-card.trainees .kpi-icon { color: #44556A; }
-                .kpi-card.preparatory .kpi-icon { color: #E87853; }
-                
-                .kpi-title {
-                    font-size: 18px;
-                    color: #666;
-                    margin-bottom: 10px;
-                }
-                
-                .kpi-value {
-                    font-size: 36px;
-                    font-weight: bold;
-                    color: #333;
-                    margin-bottom: 15px;
-                }
-                
-                .kpi-details {
-                    background: #f8f9fa;
-                    padding: 15px;
-                    border-radius: 8px;
-                    margin-top: 15px;
-                }
-                
-                .detail-row {
-                    display: flex;
-                    justify-content: space-between;
-                    padding: 8px 0;
-                    border-bottom: 1px solid #e9ecef;
-                }
-                
-                .detail-row:last-child {
-                    border-bottom: none;
-                }
-                
-                .detail-label {
-                    color: #666;
-                    font-size: 14px;
-                }
-                
-                .detail-value {
-                    color: #333;
-                    font-weight: bold;
-                    font-size: 14px;
-                }
-                
-                .footer { 
-                    margin-top: 40px; 
-                    text-align: center; 
-                    color: #666; 
-                    font-size: 14px;
-                    background: white;
-                    padding: 20px;
-                    border-radius: 10px;
-                }
-                
-                .footer p {
-                    margin: 5px 0;
-                }
-                
-                @media print {
-                    body {
-                        background: white;
-                        padding: 20px;
-                    }
-                    
-                    .kpi-card {
-                        break-inside: avoid;
-                    }
-                }
+                @page { size: A4; margin: 15mm; }
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body { font-family: 'Arial', sans-serif; direction: rtl; padding: 20px; line-height: 1.6; }
+                .header { text-align: center; margin-bottom: 30px; border-bottom: 3px solid #36E39B; padding-bottom: 15px; }
+                .header h1 { color: #333; margin-bottom: 5px; font-size: 28px; }
+                .header p { color: #666; font-size: 14px; }
+                .kpi-container { display: grid; grid-template-columns: 1fr; gap: 20px; margin-top: 20px; }
+                .kpi-card { border: 2px solid #ddd; border-radius: 10px; padding: 20px; background: #f9f9f9; }
+                .kpi-card.volunteers { border-color: #96BCB7; }
+                .kpi-card.trainees { border-color: #44556A; }
+                .kpi-card.preparatory { border-color: #E87853; }
+                .kpi-title { font-size: 24px; font-weight: bold; margin-bottom: 15px; text-align: center; }
+                .kpi-details { margin-top: 10px; }
+                .detail-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #ddd; }
+                .detail-label { font-weight: bold; color: #555; }
+                .detail-value { color: #333; font-size: 18px; }
+                .footer { margin-top: 40px; text-align: center; font-size: 12px; color: #666; border-top: 2px solid #ddd; padding-top: 15px; }
             </style>
         </head>
         <body>
             <div class="header">
-                <h1>📊 تقرير مؤشرات الأداء الرئيسية (KPIs)</h1>
-                <p class="date-info">تاريخ التقرير: ${new Date().toLocaleDateString('ar-SA')}</p>
-                ${filterInfo}
+                <h1>تقرير التحليلات والإحصائيات</h1>
+                <p>نظام الحضور الذكي | حــاضــر</p>
+                <p>تاريخ التقرير: ${new Date().toLocaleDateString('ar-SA')}</p>
             </div>
             
-            <div class="kpi-grid">
+            <div class="kpi-container">
                 <div class="kpi-card volunteers">
-                    <div class="kpi-icon">🤝</div>
-                    <div class="kpi-title">المتطوعين</div>
-                    <div class="kpi-value">${volunteersStats.totalSessions}</div>
+                    <div class="kpi-title">👋 المتطوعين</div>
                     <div class="kpi-details">
                         <div class="detail-row">
                             <span class="detail-label">إجمالي الحضور</span>
@@ -1375,9 +1189,7 @@ function generateKPIPDFHTML(volunteersStats, traineesStats, preparatoryStats) {
                 </div>
                 
                 <div class="kpi-card trainees">
-                    <div class="kpi-icon">🎓</div>
-                    <div class="kpi-title">المتدربين</div>
-                    <div class="kpi-value">${traineesStats.totalSessions}</div>
+                    <div class="kpi-title">🎓 المتدربين</div>
                     <div class="kpi-details">
                         <div class="detail-row">
                             <span class="detail-label">إجمالي الحضور</span>
@@ -1407,9 +1219,7 @@ function generateKPIPDFHTML(volunteersStats, traineesStats, preparatoryStats) {
                 </div>
                 
                 <div class="kpi-card preparatory">
-                    <div class="kpi-icon">👨‍🎓</div>
-                    <div class="kpi-title">التمهير</div>
-                    <div class="kpi-value">${preparatoryStats.totalSessions}</div>
+                    <div class="kpi-title">👨‍🎓 التمهير</div>
                     <div class="kpi-details">
                         <div class="detail-row">
                             <span class="detail-label">إجمالي الحضور</span>
@@ -1433,7 +1243,7 @@ function generateKPIPDFHTML(volunteersStats, traineesStats, preparatoryStats) {
                         </div>
                         <div class="detail-row">
                             <span class="detail-label">نسبة الإنجاز</span>
-                            <span class_name="detail-value">${preparatoryStats.completionRate}%</span>
+                            <span class="detail-value">${preparatoryStats.completionRate}%</span>
                         </div>
                     </div>
                 </div>
@@ -1597,7 +1407,7 @@ function setupKeyboardShortcuts() {
                     break;
                 case '3':
                     e.preventDefault();
-                    showForm('admin-login'); // Changed from showAdmin()
+                    showForm('admin-login');
                     break;
             }
         }
