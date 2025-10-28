@@ -1031,20 +1031,14 @@ function exportKPIToExcel() {
         const traineesStats = calculateCategoryStats(traineesData, 'متدرب');
         const preparatoryStats = calculateCategoryStats(preparatoryData, 'تمهير');
         
-        // Create CSV header
-        const header = ['الفئة', 'إجمالي الجلسات', 'الجلسات المكتملة', 'إجمالي الساعات', 'متوسط الجلسة', 'الأيام الفريدة', 'نسبة الإنجاز', 'المستخدمين النشطين'];
+        // Create CSV header - simplified to match PDF
+        const header = ['الفئة', 'إجمالي الحضور', 'الأيام', 'إجمالي الساعات'];
         
-        // Create CSV rows
+        // Create CSV rows - simplified to match PDF
         const rows = [
-            ['المتطوعين', volunteersStats.totalSessions, volunteersStats.completedSessions, 
-             volunteersStats.totalHours.toFixed(1), volunteersStats.avgSessionHours, 
-             volunteersStats.uniqueDays, volunteersStats.completionRate + '%', volunteersData.length],
-            ['المتدربين', traineesStats.totalSessions, traineesStats.completedSessions, 
-             traineesStats.totalHours.toFixed(1), traineesStats.avgSessionHours, 
-             traineesStats.uniqueDays, traineesStats.completionRate + '%', traineesData.length],
-            ['التمهير', preparatoryStats.totalSessions, preparatoryStats.completedSessions, 
-             preparatoryStats.totalHours.toFixed(1), preparatoryStats.avgSessionHours, 
-             preparatoryStats.uniqueDays, preparatoryStats.completionRate + '%', preparatoryData.length]
+            ['المتطوعين', volunteersStats.totalSessions, volunteersStats.uniqueDays, volunteersStats.totalHours.toFixed(1)],
+            ['المتدربين', traineesStats.totalSessions, traineesStats.uniqueDays, traineesStats.totalHours.toFixed(1)],
+            ['التمهير', preparatoryStats.totalSessions, preparatoryStats.uniqueDays, preparatoryStats.totalHours.toFixed(1)]
         ];
         
         // Combine header and rows
@@ -1052,7 +1046,7 @@ function exportKPIToExcel() {
             .map(row => row.join(','))
             .join('\n');
         
-        // Download file
+        // Download file with BOM for Arabic support
         downloadCSVFile(csvContent, 'kpi_analytics');
         showAlert('تم تصدير التحليلات بنجاح');
     } catch (error) {
@@ -1144,7 +1138,7 @@ function exportKPIToPDF() {
  * @param {string} filename - Base filename
  */
 function downloadCSVFile(csv, filename) {
-const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     
@@ -1741,11 +1735,11 @@ function formatDateTime(dateTimeString) {
     const formattedHours = hours % 12 || 12;
     const formattedTime = `${formattedHours}:${minutes.toString().padStart(2, '0')} ${ampm}`;
     
-    // Format date
-    const day = dateTime.getDate();
-    const month = dateTime.getMonth() + 1;
+    // Format date - Arabic format (يوم/شهر/سنة)
+    const day = dateTime.getDate().toString().padStart(2, '0');
+    const month = (dateTime.getMonth() + 1).toString().padStart(2, '0');
     const year = dateTime.getFullYear();
-    const formattedDate = `${year}/${month.toString().padStart(2, '0')}/${day.toString().padStart(2, '0')}`;
+    const formattedDate = `${day}/${month}/${year}`;
     
     return `${formattedDate} ${formattedTime}`;
 }
