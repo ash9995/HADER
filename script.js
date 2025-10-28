@@ -1706,7 +1706,7 @@ function generateKPIPDFHTML(volunteersStats, traineesStats, preparatoryStats) {
 }
 
 /* ===============================================
-   UTILITY FUNCTIONS
+   HELPER FUNCTIONS - DATE & TIME (MODIFIED)
    =============================================== */
 
 /**
@@ -1719,7 +1719,61 @@ function getCurrentDateTime() {
 }
 
 /**
- * Format datetime string for display
+ * Formats a Date object into a readable time string for the table
+ * @param {Date} dateObj - The Date object to format
+ * @returns {string} The formatted time string (e.g., "١:٣٠:٠٠ رهش" or "١:٣٠:٠٠ موي")
+ */
+function formatTimeForTable(dateObj) {
+    // استخدم 'ar-SA' للإعدادات المحلية العربية السعودية لضمان الأرقام العربية
+    // وتنسيق الوقت
+    const timeFormatter = new Intl.DateTimeFormat('ar-SA', {
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true, // للتأكد من استخدام ص/م أو مؤشر مشابه
+    });
+
+    let formattedTime = timeFormatter.format(dateObj);
+    
+    // التعديل ليناسب (رهش / موي)
+    // 1. استبدال "ص" بـ "موي" (صباحاً)
+    // 2. استبدال "م" بـ "رهش" (مساءً)
+    formattedTime = formattedTime.replace(/ص/g, 'موي').replace(/م/g, 'رهش');
+
+    return formattedTime;
+}
+
+
+/**
+ * Formats a Date object into a readable date string
+ * @param {Date} dateObj - The Date object to format
+ * @returns {string} The formatted date string (e.g., "٠٤/٢٠/٢٠٢٣")
+ */
+function formatDateForTable(dateObj) {
+    // استخدم 'ar-SA' للحصول على التنسيق باللغة العربية، وتنسيق (شهر/يوم/سنة)
+    const dateFormatter = new Intl.DateTimeFormat('ar-SA', {
+        year: 'numeric',
+        month: '2-digit', // الشهر (مقدم)
+        day: '2-digit',   // اليوم
+    });
+    
+    const dateString = dateFormatter.format(dateObj);
+    const dateParts = dateString.split('/'); 
+    
+    // يتم تنسيق التاريخ في 'ar-SA' عادةً كـ (يوم/شهر/سنة)، لكن في هذه الحالة نضمن عرضه كـ (شهر/يوم/سنة)
+    // عبر استخدام ترتيب المكونات إذا لزم الأمر، لكننا نعتمد على toLocaleString/Intl.DateTimeFormat للحصول على الأرقام العربية.
+    // وبما أن تنسيق ar-SA هو ي/م/س (عادة)، سنقوم بترتيبه ليصبح م/ي/س.
+    if (dateParts.length === 3) {
+        return `${dateParts[1]}/${dateParts[0]}/${dateParts[2]}`; // الترتيب: شهر/يوم/سنة
+    }
+
+    return dateString;
+}
+
+
+/**
+ * Format datetime string for display (جدول الإدارة وعمليات التصدير)
+ * **التنسيق:** شهر/يوم/سنة HH:MM:SS رهش/موي
  * @param {string} dateTimeString - Datetime string to format
  * @returns {string} Formatted datetime
  */
@@ -1728,18 +1782,30 @@ function formatDateTime(dateTimeString) {
     
     const dateTime = new Date(dateTimeString);
     
-    // Format time (12-hour format)
-    const hours = dateTime.getHours();
-    const minutes = dateTime.getMinutes();
-    const ampm = hours >= 12 ? 'م' : 'ص';
-    const formattedHours = hours % 12 || 12;
-    const formattedTime = `${formattedHours}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+    // --- تنسيق الوقت مع رهش / موي ---
+    const timeFormatter = new Intl.DateTimeFormat('ar-SA', {
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true,
+    });
+
+    let formattedTime = timeFormatter.format(dateTime);
+    // استبدال "ص" بـ "موي" و "م" بـ "رهش"
+    formattedTime = formattedTime.replace(/ص/g, 'موي').replace(/م/g, 'رهش');
     
-    // Format date - Arabic format (يوم/شهر/سنة)
-    const day = dateTime.getDate().toString().padStart(2, '0');
-    const month = (dateTime.getMonth() + 1).toString().padStart(2, '0');
-    const year = dateTime.getFullYear();
-    const formattedDate = `${day}/${month}/${year}`;
+    // --- تنسيق التاريخ (شهر/يوم/سنة) ---
+    const dateFormatter = new Intl.DateTimeFormat('ar-SA', {
+        year: 'numeric',
+        month: '2-digit', // الشهر
+        day: '2-digit',   // اليوم
+    });
+    
+    const dateString = dateFormatter.format(dateTime);
+    const dateParts = dateString.split('/'); 
+    
+    // يتم تنسيق 'ar-SA' عادةً كـ ي/م/س، نريده م/ي/س
+    const formattedDate = dateParts.length === 3 ? `${dateParts[1]}/${dateParts[0]}/${dateParts[2]}` : dateString;
     
     return `${formattedDate} ${formattedTime}`;
 }
