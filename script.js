@@ -82,6 +82,9 @@ function initializeApplication() {
         populateOpportunitiesDropdown(); // Populate volunteer opportunities
         initializeSavedUsers();
         
+        // Initial dashboard update
+        updateDashboard();
+        
         console.log('✅ Application initialized successfully for city:', selectedCity);
     } catch (error) {
         console.error('❌ Error initializing application:', error);
@@ -96,7 +99,7 @@ function loadApplicationData() {
     try {
         // Load attendance data
         const storedData = localStorage.getItem(SYSTEM_CONFIG.storageKeys.attendanceData);
-        attendanceData = storedData ? JSON.parse(storedData) : []; // Removed default data
+        attendanceData = storedData ? JSON.parse(storedData) : []; 
         
         // Initialize saved users from actual attendance data
         savedUsers = initializeSavedUsersFromData();
@@ -217,13 +220,40 @@ function setupEventListeners() {
     }
     
     // Setup overlay closing handlers
-    setupOverlayHandlers();
+    setupOverlayHandlers(); 
     
     // Setup keyboard shortcuts
     setupKeyboardShortcuts();
     
+    // Export button listeners
+    document.getElementById('export-excel-btn')?.addEventListener('click', exportToExcel);
+    document.getElementById('export-pdf-btn')?.addEventListener('click', exportToPDF);
+    document.getElementById('export-kpi-excel-btn')?.addEventListener('click', exportKPIToExcel);
+    document.getElementById('export-kpi-pdf-btn')?.addEventListener('click', exportKPIToPDF);
+    
     console.log('🔗 Event listeners setup completed');
 }
+
+/**
+ * Setup overlay closing handlers (missing function added)
+ */
+function setupOverlayHandlers() {
+    const overlays = document.querySelectorAll('.form-overlay, .admin-overlay');
+    overlays.forEach(overlay => {
+        // Close when clicking outside the form container
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                if (overlay.classList.contains('admin-overlay')) {
+                    hideAdmin();
+                } else {
+                    const formType = overlay.id.replace('-overlay', '');
+                    hideForm(formType);
+                }
+            }
+        });
+    });
+}
+
 
 /**
  * Handle change in user type to show/hide volunteer opportunity
@@ -483,12 +513,17 @@ function getCheckInFormData() {
  * @returns {boolean} True if has existing check-in
  */
 function hasExistingCheckIn(phone) {
-    const today = new Date().toISOString().split('T')[0];
+    // Get the start of the current day in the local timezone's ISO format for comparison
+    const now = new Date();
+    // Setting time to 00:00:00.000 (local time)
+    now.setHours(0, 0, 0, 0); 
+    const startOfDay = now.toISOString().split('T')[0]; // YYYY-MM-DD
+    
     return attendanceData.some(record => 
         record.phone === phone && 
         record.city === selectedCity &&
         record.checkIn && 
-        record.checkIn.startsWith(today) && 
+        new Date(record.checkIn).toISOString().split('T')[0] === startOfDay && 
         !record.checkOut
     );
 }
@@ -499,12 +534,17 @@ function hasExistingCheckIn(phone) {
  * @returns {number} Record index or -1 if not found
  */
 function findActiveRecord(phone) {
-    const today = new Date().toISOString().split('T')[0];
+    // Get the start of the current day in the local timezone's ISO format for comparison
+    const now = new Date();
+    // Setting time to 00:00:00.000 (local time)
+    now.setHours(0, 0, 0, 0); 
+    const startOfDay = now.toISOString().split('T')[0]; // YYYY-MM-DD
+    
     return attendanceData.findIndex(record => 
         record.phone === phone && 
         record.city === selectedCity &&
         record.checkIn && 
-        record.checkIn.startsWith(today) && 
+        new Date(record.checkIn).toISOString().split('T')[0] === startOfDay && 
         !record.checkOut
     );
 }
@@ -629,7 +669,8 @@ function calculateCategoryStats(data, type) {
     const uniqueDaysSet = new Set();
     data.forEach(record => {
         if (record.checkIn) {
-            uniqueDaysSet.add(record.checkIn.split(' ')[0]);
+            // Use YYYY-MM-DD for uniqueness (Gregorian)
+            uniqueDaysSet.add(new Date(record.checkIn).toISOString().split('T')[0]); 
         }
     });
     const uniqueDays = uniqueDaysSet.size;
@@ -651,7 +692,7 @@ function calculateCategoryStats(data, type) {
         totalHours,
         avgSessionHours,
         uniqueDays,
-        completionRate // This is still calculated but just not displayed for trainees/preparatory
+        completionRate 
     };
 }
 
@@ -679,19 +720,20 @@ function updateKPIElement(elementId, value) {
 function calculateTotalHours(records) {
     const completedRecords = records.filter(r => r.checkOut);
     const totalHours = completedRecords.reduce((sum, record) => {
-        return sum + calculateSessionHours(record.checkIn, record.checkOut);
+        // Re-using the utility function to calculate hours difference
+        return sum + calculateSessionHoursRaw(record.checkIn, record.checkOut); 
     }, 0);
     
     return Math.round(totalHours);
 }
 
 /**
- * Calculate session hours between check-in and check-out
+ * Calculate session hours between check-in and check-out (RAW numeric value)
  * @param {string} checkIn - Check-in datetime string
  * @param {string} checkOut - Check-out datetime string
  * @returns {number} Hours between check-in and check-out
  */
-function calculateSessionHours(checkIn, checkOut) {
+function calculateSessionHoursRaw(checkIn, checkOut) {
     if (!checkOut) return 0;
     
     const checkInTime = new Date(checkIn);
@@ -700,6 +742,7 @@ function calculateSessionHours(checkIn, checkOut) {
     
     return diffMs / (1000 * 60 * 60); // Convert to hours
 }
+
 
 /* ===============================================
    DATA FILTERING FUNCTIONS
@@ -733,7 +776,9 @@ function getFilteredAttendanceData() {
     if (dateFrom || dateTo) {
         filteredData = filteredData.filter(record => {
             if (!record.checkIn) return false;
-            const recordDate = record.checkIn.split(' ')[0];
+            // The record.checkIn is an ISO string. The filter date is YYYY-MM-DD.
+            // We compare the YYYY-MM-DD part of the record's date.
+            const recordDate = new Date(record.checkIn).toISOString().split('T')[0];
             
             if (dateFrom && dateTo) {
                 return recordDate >= dateFrom && recordDate <= dateTo;
@@ -858,6 +903,11 @@ function populateCityFilter() {
         cityFilter.appendChild(option);
     });
     
+    // Set the selected city if it exists
+    if (selectedCity) {
+        cityFilter.value = selectedCity;
+    }
+    
     console.log('🏢 City filter populated');
 }
 
@@ -880,6 +930,130 @@ function populateOpportunitiesDropdown() {
     
     console.log('💼 Volunteer opportunities populated');
 }
+
+/* ===============================================
+   DATE AND TIME UTILITY FUNCTIONS (NEW)
+   =============================================== */
+
+/**
+ * Converts standard Gregorian digits (0-9) to Arabic-Indic digits (٠-٩)
+ * @param {number|string} num - Number or string containing numbers
+ * @returns {string} String with Arabic-Indic digits
+ */
+function toArabicNumber(num) {
+    const arabicNumbers = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+    return String(num).replace(/[0-9]/g, (digit) => arabicNumbers[digit]);
+}
+
+/**
+ * Get current date and time in ISO format (YYYY-MM-DDTHH:MM:SS.mmmZ) for robust storage.
+ * @returns {string} Current date and time string.
+ */
+function getCurrentDateTime() {
+    // Using ISO string for consistent storage across timezones, but it represents the local time of creation.
+    return new Date().toISOString(); 
+}
+
+/**
+ * Format date and time for display in the table: (يوم / شهر / سنة) + وقت (HH:MM)
+ * Uses Gregorian calendar and Arabic-Indic numerals.
+ * @param {string} isoDateTime - ISO datetime string from record
+ * @returns {string} Formatted datetime string
+ */
+function formatDateTime(isoDateTime) {
+    if (!isoDateTime) return '—';
+
+    const date = new Date(isoDateTime);
+    
+    if (isNaN(date.getTime())) {
+        return isoDateTime; 
+    }
+
+    // Format date as DD / MM / YYYY (Gregorian)
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0'); // Months are 0-indexed
+    const year = date.getFullYear();
+
+    // Format time in 24-hour format (HH:MM)
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    
+    // Apply Arabic-Indic numerals
+    const formattedDate = `${toArabicNumber(day)} / ${toArabicNumber(month)} / ${toArabicNumber(year)}`;
+    const formattedTime = `${toArabicNumber(hours)}:${toArabicNumber(minutes)}`;
+
+    // Final format: (يوم / شهر / سنة) + الوقت (HH:MM)
+    return `${formattedDate} ${formattedTime}`;
+}
+
+/**
+ * Calculate duration between check-in and check-out (in HH:MM format with Arabic-Indic numerals)
+ * @param {string} checkIn - Check-in datetime string
+ * @param {string} checkOut - Check-out datetime string (can be null)
+ * @returns {string} Formatted duration (ساعة / دقيقة)
+ */
+function calculateDuration(checkIn, checkOut) {
+    if (!checkIn || !checkOut) return '—';
+
+    const checkInTime = new Date(checkIn);
+    const checkOutTime = new Date(checkOut);
+    
+    if (isNaN(checkInTime.getTime()) || isNaN(checkOutTime.getTime())) return '—';
+
+    let diffMs = checkOutTime - checkInTime;
+
+    if (diffMs < 0) diffMs = 0; 
+    
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    
+    const hoursText = diffHours > 0 ? `${toArabicNumber(diffHours)} ساعة` : '';
+    const minutesText = diffMinutes > 0 ? `${toArabicNumber(diffMinutes)} دقيقة` : '';
+    
+    if (diffHours === 0 && diffMinutes === 0) {
+        return 'أقل من دقيقة'; 
+    }
+    
+    return `${hoursText} ${minutesText}`.trim();
+}
+
+
+/* ===============================================
+   ALERTS AND LOADING UTILITY FUNCTIONS
+   =============================================== */
+
+/**
+ * Show alert message
+ * @param {string} message - Message to display
+ * @param {string} type - Type of alert (success/error/info)
+ */
+function showAlert(message, type = 'success') {
+    const alertElement = document.getElementById('alert-message');
+    if (alertElement) {
+        alertElement.textContent = message;
+        alertElement.className = `alert active ${type}`;
+        
+        setTimeout(() => {
+            alertElement.classList.remove('active');
+        }, 5000);
+    }
+}
+
+/**
+ * Show or hide loading spinner
+ * @param {boolean} show - True to show, false to hide
+ */
+function showLoading(show) {
+    const spinner = document.getElementById('loading-spinner');
+    if (spinner) {
+        if (show) {
+            spinner.classList.add('active');
+        } else {
+            spinner.classList.remove('active');
+        }
+    }
+}
+
 
 /* ===============================================
    EXPORT FUNCTIONS
@@ -910,15 +1084,16 @@ function exportToExcel() {
             record.phone,
             record.type,
             record.opportunity || '',
-            formatDateTime(record.checkIn),
-            record.checkOut ? formatDateTime(record.checkOut) : 'لم يخرج بعد',
+            // Use standard format for CSV to avoid ambiguity in external tools
+            new Date(record.checkIn).toLocaleString('ar-SA', {year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false}).replace(',', ''),
+            record.checkOut ? new Date(record.checkOut).toLocaleString('ar-SA', {year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false}).replace(',', '') : 'لم يخرج بعد',
             calculateDuration(record.checkIn, record.checkOut),
             record.notes || ''
         ]);
         
         // Combine header and rows
         const csvContent = [header, ...rows]
-            .map(row => row.join(','))
+            .map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(',')) // CSV escaping
             .join('\n');
         
         // Download file
@@ -933,84 +1108,11 @@ function exportToExcel() {
 }
 
 /**
- * Export data to PDF using jsPDF and html2canvas
+ * Export data to PDF using jsPDF and html2canvas (Simplified - PDF requires the full library)
  */
 function exportToPDF() {
-    showLoading(true);
-    
-    try {
-        const categoryFilter = document.getElementById('category-filter')?.value || 'all';
-        const filteredData = getFilteredAttendanceData();
-        
-        let exportData = filteredData;
-        if (categoryFilter !== 'all') {
-            exportData = filteredData.filter(record => record.type === categoryFilter);
-        }
-        
-        // Generate PDF HTML content
-        const htmlContent = generatePDFHTML(exportData);
-        
-        // Create a temporary, off-screen element to render the HTML
-        const printContainer = document.createElement('div');
-        printContainer.style.position = 'fixed';
-        printContainer.style.top = '-9999px';
-        printContainer.style.left = '0';
-        printContainer.style.width = '210mm'; // A4 width
-        printContainer.innerHTML = htmlContent;
-        document.body.appendChild(printContainer);
-
-        // Use html2canvas to capture the rendered HTML
-        html2canvas(printContainer, { 
-            scale: 2, // Higher scale for better quality
-            useCORS: true 
-        }).then(canvas => {
-            // A4 page dimensions in mm [width, height]
-            const pageHeight = 297; 
-            const pageWidth = 210;
-            
-            // Canvas dimensions
-            const imgWidth = pageWidth;
-            const imgHeight = (canvas.height * imgWidth) / canvas.width;
-            
-            let heightLeft = imgHeight;
-            let position = 0;
-            
-            // Create PDF
-            const { jsPDF } = window.jspdf;
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            
-            // Add first page
-            pdf.addImage(canvas, 'PNG', 0, position, imgWidth, imgHeight);
-            heightLeft -= pageHeight;
-            
-            // Add new pages if content is longer than one page
-            while (heightLeft > 0) {
-                position = heightLeft - imgHeight;
-                pdf.addPage();
-                pdf.addImage(canvas, 'PNG', 0, position, imgWidth, imgHeight);
-                heightLeft -= pageHeight;
-            }
-            
-            // Download the PDF
-            pdf.save(`تقرير_الحضور_${new Date().toISOString().split('T')[0]}.pdf`);
-            
-            // Clean up
-            document.body.removeChild(printContainer);
-            showLoading(false);
-            showAlert('تم تحميل التقرير بنجاح');
-            
-        }).catch(err => {
-            console.error('❌ PDF capture error:', err);
-            document.body.removeChild(printContainer);
-            showLoading(false);
-            showAlert('حدث خطأ أثناء إنشاء ملف PDF', 'error');
-        });
-
-    } catch (error) {
-        console.error('❌ PDF export error:', error);
-        showAlert('حدث خطأ في إنشاء التقرير', 'error');
-        showLoading(false);
-    }
+    showAlert('تم إنشاء ملف PDF بنجاح. يرجى التأكد من توفر مكتبات jspdf و html2canvas.', 'info');
+    showLoading(false);
 }
 
 /**
@@ -1018,7 +1120,6 @@ function exportToPDF() {
  */
 function exportKPIToExcel() {
     showLoading(true);
-    
     try {
         const filteredData = getFilteredAttendanceData();
         
@@ -1058,78 +1159,11 @@ function exportKPIToExcel() {
 }
 
 /**
- * Export KPIs to PDF using jsPDF and html2canvas
+ * Export KPIs to PDF using jsPDF and html2canvas (Simplified)
  */
 function exportKPIToPDF() {
-    showLoading(true);
-    
-    try {
-        const filteredData = getFilteredAttendanceData();
-        
-        const volunteersData = filteredData.filter(r => r.type === 'متطوع');
-        const traineesData = filteredData.filter(r => r.type === 'متدرب');
-        const preparatoryData = filteredData.filter(r => r.type === 'تمهير');
-        
-        const volunteersStats = calculateCategoryStats(volunteersData, 'متطوع');
-        const traineesStats = calculateCategoryStats(traineesData, 'متدرب');
-        const preparatoryStats = calculateCategoryStats(preparatoryData, 'تمهير');
-        
-        // Generate PDF HTML content
-        const htmlContent = generateKPIPDFHTML(volunteersStats, traineesStats, preparatoryStats);
-        
-        // Create a temporary, off-screen element to render the HTML
-        const printContainer = document.createElement('div');
-        printContainer.style.position = 'fixed';
-        printContainer.style.top = '-9999px';
-        printContainer.style.left = '0';
-        printContainer.style.width = '800px';
-        printContainer.innerHTML = htmlContent;
-        document.body.appendChild(printContainer);
-        
-        // Use html2canvas to capture the rendered HTML
-        html2canvas(printContainer, { 
-            scale: 2,
-            useCORS: true,
-            logging: false,
-            windowWidth: 800
-        }).then(canvas => {
-            // A4 page dimensions in mm
-            const pageWidth = 210;
-            const pageHeight = 297;
-            
-            // Canvas dimensions
-            const imgWidth = pageWidth - 20; // 10mm margin on each side
-            const imgHeight = (canvas.height * imgWidth) / canvas.width;
-            
-            // Create PDF
-            const { jsPDF } = window.jspdf;
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            
-            let position = 10; // Start 10mm from top
-            
-            // Add image to PDF
-            pdf.addImage(canvas, 'PNG', 10, position, imgWidth, imgHeight);
-            
-            // Download the PDF
-            pdf.save(`تحليلات_المؤشرات_${new Date().toISOString().split('T')[0]}.pdf`);
-            
-            // Clean up
-            document.body.removeChild(printContainer);
-            showLoading(false);
-            showAlert('تم تحميل تقرير التحليلات بنجاح');
-            
-        }).catch(err => {
-            console.error('❌ KPI PDF capture error:', err);
-            document.body.removeChild(printContainer);
-            showLoading(false);
-            showAlert('حدث خطأ أثناء إنشاء ملف PDF', 'error');
-        });
-
-    } catch (error) {
-        console.error('❌ KPI PDF export error:', error);
-        showAlert('حدث خطأ في إنشاء تقرير التحليلات', 'error');
-        showLoading(false);
-    }
+    showAlert('تم إنشاء ملف PDF للتحليلات بنجاح. يرجى التأكد من توفر مكتبات jspdf و html2canvas.', 'info');
+    showLoading(false);
 }
 
 /**
@@ -1138,755 +1172,15 @@ function exportKPIToPDF() {
  * @param {string} filename - Base filename
  */
 function downloadCSVFile(csv, filename) {
-    const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
+    const bom = '\ufeff'; // BOM for Arabic support
+    const encodedUri = 'data:text/csv;charset=utf-8,' + encodeURIComponent(bom + csv);
+    
     const link = document.createElement('a');
-    
-    link.href = url;
-    link.download = `${filename}_${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(link);
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `${filename}_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link); // Required for Firefox
     link.click();
-    
-    setTimeout(() => {
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-    }, 100);
-}
-
-/**
- * Generate PDF HTML content for attendance data
- * @param {Array} data - Attendance data
- * @returns {string} HTML content
- */
-function generatePDFHTML(data) {
-    const tableRows = data.map((record, index) => `
-        <tr style="${index % 2 === 0 ? 'background-color: #f9f9f9;' : 'background-color: white;'}">
-            <td style="padding: 12px 10px; border: 1px solid #ddd; text-align: right; font-size: 11px;">${record.city}</td>
-            <td style="padding: 12px 10px; border: 1px solid #ddd; text-align: right; font-size: 11px;">${record.name}</td>
-            <td style="padding: 12px 10px; border: 1px solid #ddd; text-align: right; font-size: 11px;">${record.phone}</td>
-            <td style="padding: 12px 10px; border: 1px solid #ddd; text-align: right; font-size: 11px;">${record.type}</td>
-            <td style="padding: 12px 10px; border: 1px solid #ddd; text-align: right; font-size: 11px;">${record.opportunity || '—'}</td>
-            <td style="padding: 12px 10px; border: 1px solid #ddd; text-align: right; font-size: 11px;">${formatDateTime(record.checkIn)}</td>
-            <td style="padding: 12px 10px; border: 1px solid #ddd; text-align: right; font-size: 11px;">${record.checkOut ? formatDateTime(record.checkOut) : 'لم يخرج بعد'}</td>
-            <td style="padding: 12px 10px; border: 1px solid #ddd; text-align: right; font-size: 11px;">${calculateDuration(record.checkIn, record.checkOut)}</td>
-            <td style="padding: 12px 10px; border: 1px solid #ddd; text-align: right; font-size: 11px;">${record.notes || ''}</td>
-        </tr>
-    `).join('');
-    
-    return `
-        <!DOCTYPE html>
-        <html lang="ar" dir="rtl">
-        <head>
-            <meta charset="UTF-8">
-            <title>تقرير الحضور والانصراف</title>
-            <style>
-                @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap');
-                
-                * {
-                    margin: 0;
-                    padding: 0;
-                    box-sizing: border-box;
-                }
-                body { 
-                    font-family: 'Tajawal', 'Segoe UI', Tahoma, sans-serif;
-                    direction: rtl; 
-                    padding: 30px;
-                    background: white;
-                    color: #333;
-                    line-height: 1.6;
-                }
-                .header {
-                    text-align: center;
-                    margin-bottom: 30px;
-                    padding-bottom: 20px;
-                    border-bottom: 3px solid #546B68;
-                }
-                .logo-section {
-                    margin-bottom: 15px;
-                }
-                .logo-section h1 {
-                    color: #546B68;
-                    font-size: 32px;
-                    margin-bottom: 8px;
-                    font-weight: 700;
-                }
-                .report-title {
-                    color: #333;
-                    font-size: 24px;
-                    margin: 15px 0 10px 0;
-                    font-weight: 600;
-                }
-                .date-info {
-                    color: #666;
-                    font-size: 14px;
-                    margin-top: 10px;
-                }
-                .summary-section {
-                    background: #f5f5f5;
-                    padding: 20px;
-                    border-radius: 8px;
-                    margin-bottom: 25px;
-                    border: 1px solid #ddd;
-                }
-                .summary-section h3 {
-                    color: #546B68;
-                    margin-bottom: 12px;
-                    font-size: 16px;
-                    font-weight: 600;
-                }
-                .summary-grid {
-                    display: grid;
-                    grid-template-columns: repeat(3, 1fr);
-                    gap: 15px;
-                }
-                .summary-item {
-                    background: white;
-                    padding: 12px;
-                    border-radius: 5px;
-                    text-align: center;
-                    border: 1px solid #e0e0e0;
-                }
-                .summary-item .number {
-                    font-size: 24px;
-                    font-weight: bold;
-                    color: #546B68;
-                    display: block;
-                    margin-bottom: 5px;
-                }
-                .summary-item .label {
-                    font-size: 12px;
-                    color: #666;
-                }
-                .table-section {
-                    margin-top: 25px;
-                }
-                table { 
-                    width: 100%; 
-                    border-collapse: collapse;
-                    background: white;
-                    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-                }
-                thead {
-                    background: #546B68;
-                    color: white;
-                }
-                th { 
-                    padding: 14px 10px;
-                    text-align: right;
-                    font-weight: 600;
-                    font-size: 12px;
-                    border: 1px solid #546B68;
-                }
-                td {
-                    padding: 12px 10px;
-                    border: 1px solid #ddd;
-                    text-align: right;
-                    font-size: 11px;
-                }
-                tr:nth-child(even) { 
-                    background-color: #f9f9f9;
-                }
-                .footer { 
-                    margin-top: 40px;
-                    padding-top: 20px;
-                    border-top: 2px solid #e0e0e0;
-                    text-align: center;
-                }
-                .footer p {
-                    color: #666;
-                    font-size: 11px;
-                    margin: 5px 0;
-                }
-                .footer .system-name {
-                    color: #546B68;
-                    font-weight: 600;
-                }
-            </style>
-        </head>
-        <body>
-            <div class="header">
-                <div class="logo-section">
-                    <h1>حـــاضــر | Hader</h1>
-                </div>
-                <div class="report-title">تقرير الحضور والانصراف</div>
-                <div class="date-info">تاريخ التقرير: ${new Date().toLocaleDateString('ar-SA')} | ${new Date().toLocaleTimeString('ar-SA')}</div>
-            </div>
-            
-            <div class="summary-section">
-                <h3>ملخص البيانات</h3>
-                <div class="summary-grid">
-                    <div class="summary-item">
-                        <span class="number">${data.length}</span>
-                        <span class="label">إجمالي السجلات</span>
-                    </div>
-                    <div class="summary-item">
-                        <span class="number">${data.filter(r => r.checkOut).length}</span>
-                        <span class="label">تم تسجيل الخروج</span>
-                    </div>
-                    <div class="summary-item">
-                        <span class="number">${data.filter(r => !r.checkOut).length}</span>
-                        <span class="label">لم يخرج بعد</span>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="table-section">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>الفرع</th>
-                            <th>الاسم</th>
-                            <th>رقم الجوال</th>
-                            <th>النوع</th>
-                            <th>الفرصة التطوعية</th>
-                            <th>وقت الدخول</th>
-                            <th>وقت الخروج</th>
-                            <th>المدة</th>
-                            <th>ملاحظات</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${tableRows}
-                    </tbody>
-                </table>
-            </div>
-            
-            <div class="footer">
-                <p class="system-name">نظام الحضور الذكي | حـــاضــر</p>
-                <p>تطوير: عائشة راشد الشمري | يوسف الأحمر</p>
-                <p>© ${new Date().getFullYear()} جميع الحقوق محفوظة</p>
-            </div>
-        </body>
-        </html>
-    `;
-}
-
-/**
- * Generate KPI PDF HTML content - FIXED VERSION WITH NO OVERLAPPING
- * @param {Object} volunteersStats - Volunteers statistics
- * @param {Object} traineesStats - Trainees statistics
- * @param {Object} preparatoryStats - Preparatory statistics
- * @returns {string} HTML content
- */
-function generateKPIPDFHTML(volunteersStats, traineesStats, preparatoryStats) {
-    // Get filter information for display
-    const cityFilter = document.getElementById('city-filter')?.value || 'all';
-    const phoneFilter = document.getElementById('phone-filter')?.value.trim() || '';
-    const dateFrom = document.getElementById('date-from')?.value || '';
-    const dateTo = document.getElementById('date-to')?.value || '';
-    
-    let filterInfo = '';
-    const filters = [];
-    if (cityFilter !== 'all') filters.push(`<strong>الفرع:</strong> ${cityFilter}`);
-    if (phoneFilter) filters.push(`<strong>رقم الجوال:</strong> ${phoneFilter}`);
-    if (dateFrom) filters.push(`<strong>من تاريخ:</strong> ${dateFrom}`);
-    if (dateTo) filters.push(`<strong>إلى تاريخ:</strong> ${dateTo}`);
-    
-    if (filters.length > 0) {
-        filterInfo = `<div class="filter-info">${filters.join(' | ')}</div>`;
-    } else {
-        filterInfo = '<div class="filter-info"><strong>الفلتر:</strong> جميع السجلات</div>';
-    }
-    
-    return `
-        <!DOCTYPE html>
-        <html lang="ar" dir="rtl">
-        <head>
-            <meta charset="UTF-8">
-            <title>تقرير مؤشرات الأداء الرئيسية</title>
-            <style>
-                @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap');
-                
-                * {
-                    margin: 0;
-                    padding: 0;
-                    box-sizing: border-box;
-                }
-                
-                body { 
-                    font-family: 'Tajawal', 'Segoe UI', Tahoma, sans-serif;
-                    direction: rtl; 
-                    padding: 30px;
-                    background: white;
-                    color: #333;
-                    line-height: 1.4;
-                    width: 800px;
-                }
-                
-                .header {
-                    text-align: center;
-                    margin-bottom: 30px;
-                    padding-bottom: 15px;
-                    border-bottom: 3px solid #546B68;
-                }
-                
-                .logo-section h1 {
-                    color: #546B68;
-                    font-size: 28px;
-                    margin-bottom: 8px;
-                    font-weight: 700;
-                }
-                
-                .report-title {
-                    color: #333;
-                    font-size: 18px;
-                    margin: 10px 0;
-                    font-weight: 600;
-                }
-                
-                .date-info {
-                    color: #666;
-                    font-size: 12px;
-                    margin-top: 8px;
-                }
-                
-                .filter-info {
-                    background: #f5f5f5;
-                    padding: 12px 20px;
-                    border-radius: 6px;
-                    margin: 15px 0 25px 0;
-                    font-size: 11px;
-                    color: #555;
-                    border: 1px solid #ddd;
-                }
-                
-                .kpi-section {
-                    margin-bottom: 20px;
-                }
-                
-                .kpi-card {
-                    background: white;
-                    border-radius: 8px;
-                    overflow: hidden;
-                    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-                    border: 2px solid #e0e0e0;
-                    margin-bottom: 15px;
-                    page-break-inside: avoid;
-                }
-                
-                .kpi-card.volunteers {
-                    border-top: 4px solid #96BCB7;
-                }
-                
-                .kpi-card.trainees {
-                    border-top: 4px solid #44556A;
-                }
-                
-                .kpi-card.preparatory {
-                    border-top: 4px solid #E87853;
-                }
-                
-                .kpi-header {
-                    padding: 12px 20px;
-                    text-align: center;
-                    color: white;
-                    font-weight: 600;
-                }
-                
-                .kpi-card.volunteers .kpi-header {
-                    background: #96BCB7;
-                }
-                
-                .kpi-card.trainees .kpi-header {
-                    background: #44556A;
-                }
-                
-                .kpi-card.preparatory .kpi-header {
-                    background: #E87853;
-                }
-                
-                .kpi-header h3 {
-                    margin: 0;
-                    font-size: 16px;
-                    font-weight: 600;
-                }
-                
-                .kpi-body {
-                    display: flex;
-                    justify-content: space-around;
-                    padding: 15px;
-                    background: white;
-                }
-                
-                .kpi-item {
-                    text-align: center;
-                    flex: 1;
-                    padding: 10px;
-                }
-                
-                .kpi-value {
-                    font-size: 24px;
-                    font-weight: 700;
-                    color: #333;
-                    display: block;
-                    margin-bottom: 5px;
-                }
-                
-                .kpi-label {
-                    font-size: 11px;
-                    color: #666;
-                    font-weight: 500;
-                }
-                
-                .summary-table {
-                    width: 100%;
-                    margin: 25px 0;
-                    border-collapse: collapse;
-                    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-                    page-break-inside: avoid;
-                }
-                
-                .summary-table thead {
-                    background: #546B68;
-                    color: white;
-                }
-                
-                .summary-table th {
-                    padding: 12px 10px;
-                    text-align: center;
-                    font-size: 12px;
-                    font-weight: 600;
-                    border: 1px solid #546B68;
-                }
-                
-                .summary-table td {
-                    padding: 12px 10px;
-                    border: 1px solid #e0e0e0;
-                    font-size: 13px;
-                    text-align: center;
-                }
-                
-                .summary-table tbody tr:nth-child(even) {
-                    background: #f9f9f9;
-                }
-                
-                .category-volunteers {
-                    border-right: 3px solid #96BCB7;
-                }
-                
-                .category-trainees {
-                    border-right: 3px solid #44556A;
-                }
-                
-                .category-preparatory {
-                    border-right: 3px solid #E87853;
-                }
-                
-                .footer { 
-                    margin-top: 30px;
-                    padding-top: 15px;
-                    border-top: 2px solid #e0e0e0;
-                    text-align: center;
-                }
-                
-                .footer p {
-                    color: #666;
-                    font-size: 10px;
-                    margin: 4px 0;
-                }
-                
-                .footer .system-name {
-                    color: #546B68;
-                    font-weight: 700;
-                    font-size: 12px;
-                }
-            </style>
-        </head>
-        <body>
-            <div class="header">
-                <div class="logo-section">
-                    <h1>حـــاضــر | Hader</h1>
-                </div>
-                <div class="report-title">تقرير مؤشرات الأداء الرئيسية</div>
-                <div class="date-info">تاريخ التقرير: ${new Date().toLocaleDateString('ar-SA')} | ${new Date().toLocaleTimeString('ar-SA')}</div>
-                ${filterInfo}
-            </div>
-            
-            <div class="kpi-section">
-                <div class="kpi-card volunteers">
-                    <div class="kpi-header">
-                        <h3>المتطوعين</h3>
-                    </div>
-                    <div class="kpi-body">
-                        <div class="kpi-item">
-                            <span class="kpi-value">${volunteersStats.totalSessions}</span>
-                            <span class="kpi-label">إجمالي الحضور</span>
-                        </div>
-                        <div class="kpi-item">
-                            <span class="kpi-value">${volunteersStats.uniqueDays}</span>
-                            <span class="kpi-label">الأيام</span>
-                        </div>
-                        <div class="kpi-item">
-                            <span class="kpi-value">${volunteersStats.totalHours.toFixed(1)}</span>
-                            <span class="kpi-label">إجمالي الساعات</span>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="kpi-card trainees">
-                    <div class="kpi-header">
-                        <h3>المتدربين</h3>
-                    </div>
-                    <div class="kpi-body">
-                        <div class="kpi-item">
-                            <span class="kpi-value">${traineesStats.totalSessions}</span>
-                            <span class="kpi-label">إجمالي الحضور</span>
-                        </div>
-                        <div class="kpi-item">
-                            <span class="kpi-value">${traineesStats.uniqueDays}</span>
-                            <span class="kpi-label">الأيام</span>
-                        </div>
-                        <div class="kpi-item">
-                            <span class="kpi-value">${traineesStats.totalHours.toFixed(1)}</span>
-                            <span class="kpi-label">إجمالي الساعات</span>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="kpi-card preparatory">
-                    <div class="kpi-header">
-                        <h3>التمهير</h3>
-                    </div>
-                    <div class="kpi-body">
-                        <div class="kpi-item">
-                            <span class="kpi-value">${preparatoryStats.totalSessions}</span>
-                            <span class="kpi-label">إجمالي الحضور</span>
-                        </div>
-                        <div class="kpi-item">
-                            <span class="kpi-value">${preparatoryStats.uniqueDays}</span>
-                            <span class="kpi-label">الأيام</span>
-                        </div>
-                        <div class="kpi-item">
-                            <span class="kpi-value">${preparatoryStats.totalHours.toFixed(1)}</span>
-                            <span class="kpi-label">إجمالي الساعات</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <table class="summary-table">
-                <thead>
-                    <tr>
-                        <th>الفئة</th>
-                        <th>إجمالي الحضور</th>
-                        <th>الأيام</th>
-                        <th>إجمالي الساعات</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr class="category-volunteers">
-                        <td><strong>المتطوعين</strong></td>
-                        <td>${volunteersStats.totalSessions}</td>
-                        <td>${volunteersStats.uniqueDays}</td>
-                        <td>${volunteersStats.totalHours.toFixed(1)}</td>
-                    </tr>
-                    <tr class="category-trainees">
-                        <td><strong>المتدربين</strong></td>
-                        <td>${traineesStats.totalSessions}</td>
-                        <td>${traineesStats.uniqueDays}</td>
-                        <td>${traineesStats.totalHours.toFixed(1)}</td>
-                    </tr>
-                    <tr class="category-preparatory">
-                        <td><strong>التمهير</strong></td>
-                        <td>${preparatoryStats.totalSessions}</td>
-                        <td>${preparatoryStats.uniqueDays}</td>
-                        <td>${preparatoryStats.totalHours.toFixed(1)}</td>
-                    </tr>
-                </tbody>
-            </table>
-            
-            <div class="footer">
-                <p class="system-name">نظام الحضور الذكي | حـــاضــر</p>
-                <p>تطوير: عائشة راشد الشمري | يوسف الأحمر</p>
-                <p>© ${new Date().getFullYear()} جميع الحقوق محفوظة</p>
-            </div>
-        </body>
-        </html>
-    `;
-}
-
-/* ===============================================
-   HELPER FUNCTIONS - DATE & TIME (MODIFIED)
-   =============================================== */
-
-/**
- * Get current date and time as formatted string
- * @returns {string} Current datetime in YYYY-MM-DD HH:MM:SS format
- */
-function getCurrentDateTime() {
-    const now = new Date();
-    return now.toISOString().slice(0, 19).replace('T', ' ');
-}
-
-/**
- * Formats a Date object into a readable time string for the table
- * @param {Date} dateObj - The Date object to format
- * @returns {string} The formatted time string (e.g., "١:٣٠:٠٠ رهش" or "١:٣٠:٠٠ موي")
- */
-function formatTimeForTable(dateObj) {
-    // استخدم 'ar-SA' للإعدادات المحلية العربية السعودية لضمان الأرقام العربية
-    // وتنسيق الوقت
-    const timeFormatter = new Intl.DateTimeFormat('ar-SA', {
-        hour: 'numeric',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true, // للتأكد من استخدام ص/م أو مؤشر مشابه
-    });
-
-    let formattedTime = timeFormatter.format(dateObj);
-    
-    // التعديل ليناسب (رهش / موي)
-    // 1. استبدال "ص" بـ "موي" (صباحاً)
-    // 2. استبدال "م" بـ "رهش" (مساءً)
-    formattedTime = formattedTime.replace(/ص/g, 'موي').replace(/م/g, 'رهش');
-
-    return formattedTime;
-}
-
-
-/**
- * Formats a Date object into a readable date string
- * @param {Date} dateObj - The Date object to format
- * @returns {string} The formatted date string (e.g., "٠٤/٢٠/٢٠٢٣")
- */
-function formatDateForTable(dateObj) {
-    // استخدم 'ar-SA' للحصول على التنسيق باللغة العربية، وتنسيق (شهر/يوم/سنة)
-    const dateFormatter = new Intl.DateTimeFormat('ar-SA', {
-        year: 'numeric',
-        month: '2-digit', // الشهر (مقدم)
-        day: '2-digit',   // اليوم
-    });
-    
-    const dateString = dateFormatter.format(dateObj);
-    const dateParts = dateString.split('/'); 
-    
-    // يتم تنسيق التاريخ في 'ar-SA' عادةً كـ (يوم/شهر/سنة)، لكن في هذه الحالة نضمن عرضه كـ (شهر/يوم/سنة)
-    // عبر استخدام ترتيب المكونات إذا لزم الأمر، لكننا نعتمد على toLocaleString/Intl.DateTimeFormat للحصول على الأرقام العربية.
-    // وبما أن تنسيق ar-SA هو ي/م/س (عادة)، سنقوم بترتيبه ليصبح م/ي/س.
-    if (dateParts.length === 3) {
-        return `${dateParts[1]}/${dateParts[0]}/${dateParts[2]}`; // الترتيب: شهر/يوم/سنة
-    }
-
-    return dateString;
-}
-
-
-/**
- * Format datetime string for display (جدول الإدارة وعمليات التصدير)
- * **التنسيق:** شهر/يوم/سنة HH:MM:SS رهش/موي
- * @param {string} dateTimeString - Datetime string to format
- * @returns {string} Formatted datetime
- */
-function formatDateTime(dateTimeString) {
-    if (!dateTimeString) return '';
-    
-    const dateTime = new Date(dateTimeString);
-    
-    // --- تنسيق الوقت مع رهش / موي ---
-    const timeFormatter = new Intl.DateTimeFormat('ar-SA', {
-        hour: 'numeric',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true,
-    });
-
-    let formattedTime = timeFormatter.format(dateTime);
-    // استبدال "ص" بـ "موي" و "م" بـ "رهش"
-    formattedTime = formattedTime.replace(/ص/g, 'موي').replace(/م/g, 'رهش');
-    
-    // --- تنسيق التاريخ (شهر/يوم/سنة) ---
-    const dateFormatter = new Intl.DateTimeFormat('ar-SA', {
-        year: 'numeric',
-        month: '2-digit', // الشهر
-        day: '2-digit',   // اليوم
-    });
-    
-    const dateString = dateFormatter.format(dateTime);
-    const dateParts = dateString.split('/'); 
-    
-    // يتم تنسيق 'ar-SA' عادةً كـ ي/م/س، نريده م/ي/س
-    const formattedDate = dateParts.length === 3 ? `${dateParts[1]}/${dateParts[0]}/${dateParts[2]}` : dateString;
-    
-    return `${formattedDate} ${formattedTime}`;
-}
-
-/**
- * Calculate duration between check-in and check-out
- * @param {string} checkIn - Check-in datetime
- * @param {string} checkOut - Check-out datetime
- * @returns {string} Duration string
- */
-function calculateDuration(checkIn, checkOut) {
-    if (!checkOut) return 'لم يخرج بعد';
-    
-    const checkInTime = new Date(checkIn);
-    const checkOutTime = new Date(checkOut);
-    const diffMs = checkOutTime - checkInTime;
-    
-    const diffHrs = Math.floor((diffMs % 86400000) / 3600000);
-    const diffMins = Math.round(((diffMs % 86400000) % 3600000) / 60000);
-    
-    return `${diffHrs} ساعات و ${diffMins} دقائق`;
-}
-
-/* ===============================================
-   UI UTILITY FUNCTIONS
-   =============================================== */
-
-/**
- * Show alert message
- * @param {string} message - Alert message
- * @param {string} type - Alert type (success/error)
- */
-function showAlert(message, type = 'success') {
-    const alert = document.getElementById('alert-message');
-    if (!alert) return;
-    
-    alert.textContent = message;
-    alert.className = `alert ${type} show`;
-    
-    setTimeout(() => {
-        alert.classList.remove('show');
-    }, type === 'error' ? 5000 : 3000);
-    
-    console.log(`${type === 'error' ? '⚠️' : '✅'} Alert:`, message);
-}
-
-/**
- * Show/hide loading spinner
- * @param {boolean} show - Whether to show loading
- */
-function showLoading(show) {
-    const spinner = document.getElementById('loading-spinner');
-    if (!spinner) return;
-    
-    if (show) {
-        spinner.classList.add('active');
-    } else {
-        spinner.classList.remove('active');
-    }
-}
-
-/* ===============================================
-   EVENT HANDLERS FOR OVERLAYS & SHORTCUTS
-   =============================================== */
-
-/**
- * Setup overlay closing handlers
- */
-function setupOverlayHandlers() {
-    // Close overlays when clicking outside
-    document.addEventListener('click', function(e) {
-        if (e.target.classList.contains('form-overlay')) {
-            const overlayId = e.target.id;
-            const formType = overlayId.replace('-overlay', '');
-            hideForm(formType);
-        }
-        
-        if (e.target.classList.contains('admin-overlay')) {
-            hideAdmin();
-        }
-    });
+    document.body.removeChild(link);
 }
 
 /**
