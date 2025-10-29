@@ -208,15 +208,17 @@ function setupEventListeners() {
         phoneFilter.addEventListener('input', updateDashboard);
     }
     
-    // Date filter handlers
+    // Date filter handlers - Set English input type
     const dateFrom = document.getElementById('date-from');
     if (dateFrom) {
         dateFrom.addEventListener('change', updateDashboard);
+        dateFrom.setAttribute('lang', 'en');
     }
     
     const dateTo = document.getElementById('date-to');
     if (dateTo) {
         dateTo.addEventListener('change', updateDashboard);
+        dateTo.setAttribute('lang', 'en');
     }
     
     // Setup overlay closing handlers
@@ -261,14 +263,22 @@ function setupOverlayHandlers() {
 function handleUserTypeChange() {
     const opportunityGroup = document.getElementById('opportunity-group');
     const opportunitySelect = document.getElementById('opportunity-name');
+    const nationalIdGroup = document.getElementById('national-id-group');
+    const nationalIdInput = document.getElementById('national-id');
     
     if (this.value === 'متطوع') {
         opportunityGroup.style.display = 'block';
         opportunitySelect.required = true;
+        nationalIdGroup.style.display = 'block';
+        nationalIdInput.required = true;
     } else {
         opportunityGroup.style.display = 'none';
         opportunitySelect.required = false;
         opportunitySelect.value = ''; // Reset value
+        
+        nationalIdGroup.style.display = 'none';
+        nationalIdInput.required = false;
+        nationalIdInput.value = ''; // Reset value
     }
 }
 
@@ -316,6 +326,11 @@ function hideForm(formType) {
             const opportunitySelect = document.getElementById('opportunity-name');
             if (opportunityGroup) opportunityGroup.style.display = 'none';
             if (opportunitySelect) opportunitySelect.required = false;
+            
+            const nationalIdGroup = document.getElementById('national-id-group');
+            const nationalIdInput = document.getElementById('national-id');
+            if (nationalIdGroup) nationalIdGroup.style.display = 'none';
+            if (nationalIdInput) nationalIdInput.required = false;
         }
         
         console.log('❌ Form closed:', formType);
@@ -346,7 +361,7 @@ function initializeSavedUsers() {
     if (!savedUsers['متدرب']) savedUsers['متدرب'] = [];
     if (!savedUsers['تمهير']) savedUsers['تمهير'] = [];
     
-    console.log('📄 Saved users initialized');
+    console.log('🔄 Saved users initialized');
 }
 
 /* ===============================================
@@ -372,12 +387,7 @@ function handleCheckInSubmission(event) {
             return;
         }
         
-        // Check for existing check-in
-        if (hasExistingCheckIn(formData.phone)) {
-            showAlert('هذا الرقم مسجل بالفعل اليوم ولم يسجل خروج', 'error');
-            showLoading(false);
-            return;
-        }
+        // REMOVED: Check for existing check-in - Now allows multiple check-ins per day
         
         // Save user for future reference (trainees and preparatory only)
         if (formData.type === 'متدرب' || formData.type === 'تمهير') {
@@ -391,7 +401,7 @@ function handleCheckInSubmission(event) {
         
         // Update UI and show success message
         hideForm('checkin');
-        showAlert(`تم تسجيل حضور ${formData.name} بنجاح`);
+        showAlert(`✅ تم تسجيل حضور ${formData.name} بنجاح`);
         
         console.log('✅ Check-in successful for:', formData.name);
         
@@ -475,7 +485,7 @@ function handleCheckOutSubmission(event) {
         
         // Update UI and show success message
         hideForm('checkout');
-        showAlert(`تم تسجيل خروج ${attendanceData[recordIndex].name} بنجاح`);
+        showAlert(`✅ تم تسجيل خروج ${attendanceData[recordIndex].name} بنجاح`);
         
         console.log('✅ Check-out successful for:', attendanceData[recordIndex].name);
         
@@ -493,9 +503,11 @@ function handleCheckOutSubmission(event) {
 function getCheckInFormData() {
     const userType = document.getElementById('user-type').value;
     let opportunity = '';
+    let nationalId = '';
     
     if (userType === 'متطوع') {
         opportunity = document.getElementById('opportunity-name').value;
+        nationalId = document.getElementById('national-id').value.trim();
     }
     
     return {
@@ -503,50 +515,40 @@ function getCheckInFormData() {
         name: document.getElementById('checkin-name').value.trim(),
         phone: document.getElementById('checkin-phone').value.trim(),
         type: userType,
-        opportunity: opportunity
+        opportunity: opportunity,
+        nationalId: nationalId
     };
 }
 
 /**
- * Check if user already has an active check-in today
- * @param {string} phone - Phone number to check
- * @returns {boolean} True if has existing check-in
+ * REMOVED: hasExistingCheckIn function - No longer needed
+ * The system now allows multiple check-ins per day
  */
-function hasExistingCheckIn(phone) {
-    // Get the start of the current day in the local timezone's ISO format for comparison
-    const now = new Date();
-    // Setting time to 00:00:00.000 (local time)
-    now.setHours(0, 0, 0, 0); 
-    const startOfDay = now.toISOString().split('T')[0]; // YYYY-MM-DD
-    
-    return attendanceData.some(record => 
-        record.phone === phone && 
-        record.city === selectedCity &&
-        record.checkIn && 
-        new Date(record.checkIn).toISOString().split('T')[0] === startOfDay && 
-        !record.checkOut
-    );
-}
 
 /**
- * Find active attendance record for today
+ * Find active attendance record for today (most recent without checkout)
  * @param {string} phone - Phone number to search
  * @returns {number} Record index or -1 if not found
  */
 function findActiveRecord(phone) {
-    // Get the start of the current day in the local timezone's ISO format for comparison
-    const now = new Date();
-    // Setting time to 00:00:00.000 (local time)
-    now.setHours(0, 0, 0, 0); 
-    const startOfDay = now.toISOString().split('T')[0]; // YYYY-MM-DD
+    const startOfDay = getLocalDateString(new Date());
     
-    return attendanceData.findIndex(record => 
-        record.phone === phone && 
-        record.city === selectedCity &&
-        record.checkIn && 
-        new Date(record.checkIn).toISOString().split('T')[0] === startOfDay && 
-        !record.checkOut
-    );
+    // Find all records for today without checkout, then get the most recent one
+    const todayRecords = attendanceData
+        .map((record, index) => ({ record, index }))
+        .filter(({ record }) => {
+            if (!record.checkIn) return false;
+            const recordDateString = getLocalDateString(record.checkIn);
+            return record.phone === phone && 
+                   record.city === selectedCity &&
+                   recordDateString === startOfDay && 
+                   !record.checkOut;
+        });
+    
+    if (todayRecords.length === 0) return -1;
+    
+    // Return the most recent record (last in the array)
+    return todayRecords[todayRecords.length - 1].index;
 }
 
 /**
@@ -559,9 +561,18 @@ function validateCheckInData(data) {
         return { isValid: false, message: 'الرجاء إدخال جميع البيانات المطلوبة' };
     }
     
-    // Validate opportunity if user is a volunteer
-    if (data.type === 'متطوع' && !data.opportunity) {
-        return { isValid: false, message: 'الرجاء اختيار مسمى الفرصة التطوعية' };
+    // Validate opportunity and National ID if user is a volunteer
+    if (data.type === 'متطوع') {
+        if (!data.opportunity) {
+            return { isValid: false, message: 'الرجاء اختيار مسمى الفرصة التطوعية' };
+        }
+        if (!data.nationalId) {
+            return { isValid: false, message: 'الرجاء إدخال رقم الهوية الوطنية للمتطوع' };
+        }
+        // Validate National ID format (10 digits, starts with 1)
+        if (!/^1\d{9}$/.test(data.nationalId)) {
+            return { isValid: false, message: 'رقم الهوية الوطنية يجب أن يتكون من 10 أرقام ويبدأ بالرقم 1' };
+        }
     }
     
     if (!/^05\d{8}$/.test(data.phone)) {
@@ -600,7 +611,8 @@ function createAttendanceRecord(formData) {
         name: formData.name,
         phone: formData.phone,
         type: formData.type,
-        opportunity: formData.opportunity || "", // Add opportunity
+        opportunity: formData.opportunity || "", 
+        nationalId: formData.nationalId || "",
         checkIn: getCurrentDateTime(),
         checkOut: null,
         notes: ""
@@ -669,8 +681,8 @@ function calculateCategoryStats(data, type) {
     const uniqueDaysSet = new Set();
     data.forEach(record => {
         if (record.checkIn) {
-            // Use YYYY-MM-DD for uniqueness (Gregorian)
-            uniqueDaysSet.add(new Date(record.checkIn).toISOString().split('T')[0]); 
+            // Use local YYYY-MM-DD for uniqueness
+            uniqueDaysSet.add(getLocalDateString(record.checkIn)); 
         }
     });
     const uniqueDays = uniqueDaysSet.size;
@@ -776,9 +788,8 @@ function getFilteredAttendanceData() {
     if (dateFrom || dateTo) {
         filteredData = filteredData.filter(record => {
             if (!record.checkIn) return false;
-            // The record.checkIn is an ISO string. The filter date is YYYY-MM-DD.
-            // We compare the YYYY-MM-DD part of the record's date.
-            const recordDate = new Date(record.checkIn).toISOString().split('T')[0];
+            // Get the record's local date for comparison
+            const recordDate = getLocalDateString(record.checkIn);
             
             if (dateFrom && dateTo) {
                 return recordDate >= dateFrom && recordDate <= dateTo;
@@ -834,15 +845,19 @@ function createTableRow(record) {
     const row = document.createElement('tr');
     
     const opportunityCell = record.type === 'متطوع' ? (record.opportunity || '—') : '—';
+    const nationalIdCell = record.type === 'متطوع' ? (record.nationalId || '—') : '—';
     
     row.innerHTML = `
         <td>${record.city}</td>
         <td>${record.name}</td>
         <td>${record.phone}</td>
+        <td>${nationalIdCell}</td> 
         <td>${record.type}</td>
         <td>${opportunityCell}</td>
-        <td>${formatDateTime(record.checkIn)}</td>
-        <td>${record.checkOut ? formatDateTime(record.checkOut) : 'لم يخرج بعد'}</td>
+        <td>${formatDate(record.checkIn)}</td>
+        <td>${formatTime(record.checkIn)}</td>
+        <td>${record.checkOut ? formatDate(record.checkOut) : 'لم يخرج بعد'}</td>
+        <td>${record.checkOut ? formatTime(record.checkOut) : '—'}</td>
         <td>${calculateDuration(record.checkIn, record.checkOut)}</td>
         <td contenteditable="true" onfocusout="updateNotes(${record.id}, this.textContent)">${record.notes || ''}</td>
         <td>
@@ -932,7 +947,7 @@ function populateOpportunitiesDropdown() {
 }
 
 /* ===============================================
-   DATE AND TIME UTILITY FUNCTIONS (NEW)
+   DATE AND TIME UTILITY FUNCTIONS
    =============================================== */
 
 /**
@@ -946,6 +961,23 @@ function toArabicNumber(num) {
 }
 
 /**
+ * Converts a Date object or ISO string to a local YYYY-MM-DD string
+ * @param {Date|string} dateInput - The date to convert
+ * @returns {string} YYYY-MM-DD formatted string
+ */
+function getLocalDateString(dateInput) {
+    const date = (typeof dateInput === 'string') ? new Date(dateInput) : dateInput;
+    if (isNaN(date.getTime())) return ''; // Handle invalid dates
+    
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    
+    return `${year}-${month}-${day}`;
+}
+
+
+/**
  * Get current date and time in ISO format (YYYY-MM-DDTHH:MM:SS.mmmZ) for robust storage.
  * @returns {string} Current date and time string.
  */
@@ -955,35 +987,38 @@ function getCurrentDateTime() {
 }
 
 /**
- * Format date and time for display in the table: (يوم / شهر / سنة) + وقت (HH:MM)
- * Uses Gregorian calendar and Arabic-Indic numerals.
- * @param {string} isoDateTime - ISO datetime string from record
- * @returns {string} Formatted datetime string
+ * Format date only (DD/MM/YYYY) with Arabic-Indic numerals for display
+ * @param {string} isoDateTime - ISO datetime string
+ * @returns {string} Formatted date string
  */
-function formatDateTime(isoDateTime) {
+function formatDate(isoDateTime) {
     if (!isoDateTime) return '—';
-
-    const date = new Date(isoDateTime);
     
-    if (isNaN(date.getTime())) {
-        return isoDateTime; 
-    }
-
-    // Format date as DD / MM / YYYY (Gregorian)
+    const date = new Date(isoDateTime);
+    if (isNaN(date.getTime())) return isoDateTime;
+    
     const day = date.getDate().toString().padStart(2, '0');
-    const month = (date.getMonth() + 1).toString().padStart(2, '0'); // Months are 0-indexed
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
     const year = date.getFullYear();
+    
+    return `${toArabicNumber(day)}/${toArabicNumber(month)}/${toArabicNumber(year)}`;
+}
 
-    // Format time in 24-hour format (HH:MM)
+/**
+ * Format time only (HH:MM) with Arabic-Indic numerals for display
+ * @param {string} isoDateTime - ISO datetime string
+ * @returns {string} Formatted time string
+ */
+function formatTime(isoDateTime) {
+    if (!isoDateTime) return '—';
+    
+    const date = new Date(isoDateTime);
+    if (isNaN(date.getTime())) return isoDateTime;
+    
     const hours = date.getHours().toString().padStart(2, '0');
     const minutes = date.getMinutes().toString().padStart(2, '0');
     
-    // Apply Arabic-Indic numerals
-    const formattedDate = `${toArabicNumber(day)} / ${toArabicNumber(month)} / ${toArabicNumber(year)}`;
-    const formattedTime = `${toArabicNumber(hours)}:${toArabicNumber(minutes)}`;
-
-    // Final format: (يوم / شهر / سنة) + الوقت (HH:MM)
-    return `${formattedDate} ${formattedTime}`;
+    return `${toArabicNumber(hours)}:${toArabicNumber(minutes)}`;
 }
 
 /**
@@ -1031,10 +1066,10 @@ function showAlert(message, type = 'success') {
     const alertElement = document.getElementById('alert-message');
     if (alertElement) {
         alertElement.textContent = message;
-        alertElement.className = `alert active ${type}`;
+        alertElement.className = `alert show ${type}`;
         
         setTimeout(() => {
-            alertElement.classList.remove('active');
+            alertElement.classList.remove('show');
         }, 5000);
     }
 }
@@ -1060,7 +1095,7 @@ function showLoading(show) {
    =============================================== */
 
 /**
- * Export data to Excel (CSV format)
+ * Export data to Excel (CSV format) with filters applied
  */
 function exportToExcel() {
     showLoading(true);
@@ -1074,26 +1109,28 @@ function exportToExcel() {
             exportData = filteredData.filter(record => record.type === categoryFilter);
         }
         
-        // Create CSV header
-        const header = ['الفرع', 'الاسم', 'رقم الجوال', 'النوع', 'الفرصة التطوعية', 'وقت الدخول', 'وقت الخروج', 'المدة', 'ملاحظات'];
+        // Create CSV header with separate date and time columns
+        const header = ['الفرع', 'الاسم', 'رقم الجوال', 'رقم الهوية الوطنية', 'النوع', 'الفرصة التطوعية', 'تاريخ الدخول', 'وقت الدخول', 'تاريخ الخروج', 'وقت الخروج', 'المدة', 'ملاحظات'];
         
         // Create CSV rows
         const rows = exportData.map(record => [
             record.city,
             record.name,
             record.phone,
+            record.nationalId || '',
             record.type,
             record.opportunity || '',
-            // Use standard format for CSV to avoid ambiguity in external tools
-            new Date(record.checkIn).toLocaleString('ar-SA', {year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false}).replace(',', ''),
-            record.checkOut ? new Date(record.checkOut).toLocaleString('ar-SA', {year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false}).replace(',', '') : 'لم يخرج بعد',
+            formatDate(record.checkIn),
+            formatTime(record.checkIn),
+            record.checkOut ? formatDate(record.checkOut) : 'لم يخرج بعد',
+            record.checkOut ? formatTime(record.checkOut) : '—',
             calculateDuration(record.checkIn, record.checkOut),
             record.notes || ''
         ]);
         
         // Combine header and rows
         const csvContent = [header, ...rows]
-            .map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(',')) // CSV escaping
+            .map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(','))
             .join('\n');
         
         // Download file
@@ -1108,15 +1145,137 @@ function exportToExcel() {
 }
 
 /**
- * Export data to PDF using jsPDF and html2canvas (Simplified - PDF requires the full library)
+ * Export data to PDF with filters applied and better formatting
  */
 function exportToPDF() {
-    showAlert('تم إنشاء ملف PDF بنجاح. يرجى التأكد من توفر مكتبات jspdf و html2canvas.', 'info');
-    showLoading(false);
+    showLoading(true);
+    const { jsPDF } = window.jspdf;
+    
+    try {
+        const categoryFilter = document.getElementById('category-filter')?.value || 'all';
+        const filteredData = getFilteredAttendanceData();
+        
+        let exportData = filteredData;
+        if (categoryFilter !== 'all') {
+            exportData = filteredData.filter(record => record.type === categoryFilter);
+        }
+        
+        // Sort by check-in time (newest first)
+        exportData.sort((a, b) => new Date(b.checkIn) - new Date(a.checkIn));
+        
+        // Create a temporary table for export
+        const tempTable = document.createElement('table');
+        tempTable.style.width = '100%';
+        tempTable.style.borderCollapse = 'collapse';
+        tempTable.style.fontFamily = 'Arial, sans-serif';
+        tempTable.style.fontSize = '10px';
+        tempTable.style.direction = 'rtl';
+        
+        // Create header
+        const thead = tempTable.createTHead();
+        const headerRow = thead.insertRow();
+        const headers = ['الفرع', 'الاسم', 'الجوال', 'الهوية', 'النوع', 'الفرصة', 'تاريخ الدخول', 'وقت الدخول', 'تاريخ الخروج', 'وقت الخروج', 'المدة', 'ملاحظات'];
+        
+        headers.forEach(headerText => {
+            const th = document.createElement('th');
+            th.textContent = headerText;
+            th.style.backgroundColor = '#546B68';
+            th.style.color = 'white';
+            th.style.padding = '8px';
+            th.style.border = '1px solid #ddd';
+            th.style.textAlign = 'center';
+            th.style.fontWeight = 'bold';
+            headerRow.appendChild(th);
+        });
+        
+        // Create body
+        const tbody = tempTable.createTBody();
+        exportData.forEach((record, index) => {
+            const row = tbody.insertRow();
+            row.style.backgroundColor = index % 2 === 0 ? '#f9f9f9' : 'white';
+            
+            const cells = [
+                record.city,
+                record.name,
+                record.phone,
+                record.type === 'متطوع' ? (record.nationalId || '—') : '—',
+                record.type,
+                record.type === 'متطوع' ? (record.opportunity || '—') : '—',
+                formatDate(record.checkIn),
+                formatTime(record.checkIn),
+                record.checkOut ? formatDate(record.checkOut) : 'لم يخرج',
+                record.checkOut ? formatTime(record.checkOut) : '—',
+                calculateDuration(record.checkIn, record.checkOut),
+                record.notes || ''
+            ];
+            
+            cells.forEach(cellText => {
+                const td = document.createElement('td');
+                td.textContent = cellText;
+                td.style.padding = '6px';
+                td.style.border = '1px solid #ddd';
+                td.style.textAlign = 'center';
+                td.style.whiteSpace = 'nowrap';
+                row.appendChild(td);
+            });
+        });
+        
+        // Add temporary table to body (hidden)
+        tempTable.style.position = 'absolute';
+        tempTable.style.left = '-9999px';
+        document.body.appendChild(tempTable);
+        
+        // Use html2canvas
+        html2canvas(tempTable, {
+            scale: 3,
+            useCORS: true,
+            backgroundColor: '#ffffff'
+        }).then(canvas => {
+            // Remove temporary table
+            document.body.removeChild(tempTable);
+            
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF('l', 'mm', 'a3'); // A3 landscape for more space
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            
+            const canvasWidth = canvas.width;
+            const canvasHeight = canvas.height;
+            const ratio = canvasWidth / canvasHeight;
+            
+            let imgWidth = pdfWidth - 20;
+            let imgHeight = imgWidth / ratio;
+            
+            if (imgHeight > pdfHeight - 20) {
+                imgHeight = pdfHeight - 20;
+                imgWidth = imgHeight * ratio;
+            }
+            
+            const x = (pdfWidth - imgWidth) / 2;
+            const y = 10;
+            
+            pdf.addImage(imgData, 'PNG', x, y, imgWidth, imgHeight);
+            
+            const filename = `attendance_data_${new Date().toISOString().split('T')[0]}.pdf`;
+            pdf.save(filename);
+            
+            showAlert('تم تصدير البيانات إلى PDF بنجاح', 'success');
+        }).catch(err => {
+            console.error('❌ PDF export error (Data):', err);
+            document.body.removeChild(tempTable);
+            showAlert('حدث خطأ أثناء تصدير البيانات إلى PDF', 'error');
+        }).finally(() => {
+            showLoading(false);
+        });
+    } catch (error) {
+        console.error('❌ PDF export error:', error);
+        showAlert('حدث خطأ في تصدير PDF', 'error');
+        showLoading(false);
+    }
 }
 
 /**
- * Export KPIs to Excel
+ * Export KPIs to Excel with filters applied
  */
 function exportKPIToExcel() {
     showLoading(true);
@@ -1132,10 +1291,10 @@ function exportKPIToExcel() {
         const traineesStats = calculateCategoryStats(traineesData, 'متدرب');
         const preparatoryStats = calculateCategoryStats(preparatoryData, 'تمهير');
         
-        // Create CSV header - simplified to match PDF
+        // Create CSV header
         const header = ['الفئة', 'إجمالي الحضور', 'الأيام', 'إجمالي الساعات'];
         
-        // Create CSV rows - simplified to match PDF
+        // Create CSV rows
         const rows = [
             ['المتطوعين', volunteersStats.totalSessions, volunteersStats.uniqueDays, volunteersStats.totalHours.toFixed(1)],
             ['المتدربين', traineesStats.totalSessions, traineesStats.uniqueDays, traineesStats.totalHours.toFixed(1)],
@@ -1159,11 +1318,139 @@ function exportKPIToExcel() {
 }
 
 /**
- * Export KPIs to PDF using jsPDF and html2canvas (Simplified)
+ * Export KPIs to PDF with filters applied and better formatting
  */
 function exportKPIToPDF() {
-    showAlert('تم إنشاء ملف PDF للتحليلات بنجاح. يرجى التأكد من توفر مكتبات jspdf و html2canvas.', 'info');
-    showLoading(false);
+    showLoading(true);
+    const { jsPDF } = window.jspdf;
+    
+    try {
+        const filteredData = getFilteredAttendanceData();
+        
+        // Calculate KPIs for each category
+        const volunteersData = filteredData.filter(r => r.type === 'متطوع');
+        const traineesData = filteredData.filter(r => r.type === 'متدرب');
+        const preparatoryData = filteredData.filter(r => r.type === 'تمهير');
+        
+        const volunteersStats = calculateCategoryStats(volunteersData, 'متطوع');
+        const traineesStats = calculateCategoryStats(traineesData, 'متدرب');
+        const preparatoryStats = calculateCategoryStats(preparatoryData, 'تمهير');
+        
+        // Create a temporary styled KPI display
+        const tempDiv = document.createElement('div');
+        tempDiv.style.padding = '30px';
+        tempDiv.style.backgroundColor = 'white';
+        tempDiv.style.fontFamily = 'Arial, sans-serif';
+        tempDiv.style.direction = 'rtl';
+        tempDiv.style.width = '800px';
+        
+        tempDiv.innerHTML = `
+            <h2 style="text-align: center; color: #546B68; margin-bottom: 30px; font-size: 28px;">تحليلات الحضور</h2>
+            
+            <div style="margin-bottom: 25px; padding: 20px; background: linear-gradient(135deg, #96BCB7 0%, #7da8a3 100%); border-radius: 12px; color: white;">
+                <h3 style="margin: 0 0 15px 0; text-align: center; font-size: 22px;">المتطوعين</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; text-align: center;">
+                    <div>
+                        <div style="font-size: 32px; font-weight: bold;">${volunteersStats.totalSessions}</div>
+                        <div style="font-size: 14px; margin-top: 5px;">إجمالي الحضور</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 32px; font-weight: bold;">${volunteersStats.uniqueDays}</div>
+                        <div style="font-size: 14px; margin-top: 5px;">الأيام</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 32px; font-weight: bold;">${volunteersStats.totalHours.toFixed(1)}</div>
+                        <div style="font-size: 14px; margin-top: 5px;">إجمالي الساعات</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="margin-bottom: 25px; padding: 20px; background: linear-gradient(135deg, #44556A 0%, #354252 100%); border-radius: 12px; color: white;">
+                <h3 style="margin: 0 0 15px 0; text-align: center; font-size: 22px;">المتدربين</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; text-align: center;">
+                    <div>
+                        <div style="font-size: 32px; font-weight: bold;">${traineesStats.totalSessions}</div>
+                        <div style="font-size: 14px; margin-top: 5px;">إجمالي الحضور</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 32px; font-weight: bold;">${traineesStats.uniqueDays}</div>
+                        <div style="font-size: 14px; margin-top: 5px;">الأيام</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 32px; font-weight: bold;">${traineesStats.totalHours.toFixed(1)}</div>
+                        <div style="font-size: 14px; margin-top: 5px;">إجمالي الساعات</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="padding: 20px; background: linear-gradient(135deg, #E87853 0%, #d56542 100%); border-radius: 12px; color: white;">
+                <h3 style="margin: 0 0 15px 0; text-align: center; font-size: 22px;">التمهير</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; text-align: center;">
+                    <div>
+                        <div style="font-size: 32px; font-weight: bold;">${preparatoryStats.totalSessions}</div>
+                        <div style="font-size: 14px; margin-top: 5px;">إجمالي الحضور</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 32px; font-weight: bold;">${preparatoryStats.uniqueDays}</div>
+                        <div style="font-size: 14px; margin-top: 5px;">الأيام</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 32px; font-weight: bold;">${preparatoryStats.totalHours.toFixed(1)}</div>
+                        <div style="font-size: 14px; margin-top: 5px;">إجمالي الساعات</div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        tempDiv.style.position = 'absolute';
+        tempDiv.style.left = '-9999px';
+        document.body.appendChild(tempDiv);
+        
+        html2canvas(tempDiv, {
+            scale: 3,
+            useCORS: true,
+            backgroundColor: '#ffffff'
+        }).then(canvas => {
+            document.body.removeChild(tempDiv);
+            
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            
+            const canvasWidth = canvas.width;
+            const canvasHeight = canvas.height;
+            const ratio = canvasWidth / canvasHeight;
+            
+            let imgWidth = pdfWidth - 20;
+            let imgHeight = imgWidth / ratio;
+            
+            if (imgHeight > pdfHeight - 20) {
+                imgHeight = pdfHeight - 20;
+                imgWidth = imgHeight * ratio;
+            }
+            
+            const x = (pdfWidth - imgWidth) / 2;
+            const y = 10;
+            
+            pdf.addImage(imgData, 'PNG', x, y, imgWidth, imgHeight);
+            
+            const filename = `kpi_analytics_${new Date().toISOString().split('T')[0]}.pdf`;
+            pdf.save(filename);
+            
+            showAlert('تم تصدير التحليلات إلى PDF بنجاح', 'success');
+        }).catch(err => {
+            console.error('❌ PDF export error (KPI):', err);
+            document.body.removeChild(tempDiv);
+            showAlert('حدث خطأ أثناء تصدير التحليلات إلى PDF', 'error');
+        }).finally(() => {
+            showLoading(false);
+        });
+    } catch (error) {
+        console.error('❌ KPI PDF export error:', error);
+        showAlert('حدث خطأ في تصدير التحليلات', 'error');
+        showLoading(false);
+    }
 }
 
 /**
@@ -1178,7 +1465,7 @@ function downloadCSVFile(csv, filename) {
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
     link.setAttribute('download', `${filename}_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link); // Required for Firefox
+    document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
 }

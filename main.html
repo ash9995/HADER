@@ -29,7 +29,11 @@
                 <button class="btn btn-secondary" onclick="showForm('checkout')">
                     <i class="fas fa-sign-out-alt"></i> تسجيل خروج
                 </button>
-                <button class="btn btn-admin" onclick="showForm('admin-login')">
+            </div>
+            
+            <!-- Admin button positioned at bottom with more space -->
+            <div style="margin-top: 40vh; padding: 20px;">
+                <button class="btn btn-admin" onclick="showForm('admin-login')" style="opacity: 0.7;">
                     <i class="fas fa-chart-bar"></i> لوحة التحكم
                 </button>
             </div>
@@ -76,6 +80,11 @@
                     <label for="checkin-phone">رقم الجوال</label>
                     <input type="tel" id="checkin-phone" required placeholder="05XXXXXXXX" autocomplete="off">
                 </div>
+
+<div class="form-group" id="national-id-group" style="display: none;">
+    <label for="national-id">رقم الهوية الوطنية</label>
+    <input type="text" id="national-id" name="national-id" placeholder=" (10 أرقام)" pattern="^1\d{9}$">
+</div>
                 
                 <button type="submit" class="btn btn-submit">
                     <i class="fas fa-check-circle"></i> تأكيد الحضور
@@ -236,12 +245,12 @@
                     
                     <div class="control-group">
                         <label for="date-from">من تاريخ</label>
-                        <input type="date" id="date-from">
+                        <input type="date" id="date-from" lang="en">
                     </div>
                     
                     <div class="control-group">
                         <label for="date-to">إلى تاريخ</label>
-                        <input type="date" id="date-to">
+                        <input type="date" id="date-to" lang="en">
                     </div>
                     
                     <div class="control-group">
@@ -282,9 +291,12 @@
                                 <th>الفرع</th>
                                 <th>الاسم</th>
                                 <th>رقم الجوال</th>
+                                <th>رقم الهوية الوطنية</th> 
                                 <th>النوع</th>
                                 <th>الفرصة التطوعية</th>
+                                <th>تاريخ الدخول</th>
                                 <th>وقت الدخول</th>
+                                <th>تاريخ الخروج</th>
                                 <th>وقت الخروج</th>
                                 <th>المدة</th>
                                 <th>ملاحظات</th>

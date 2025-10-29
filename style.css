@@ -111,6 +111,18 @@ body {
     pointer-events: none;
 }
 
+/* Force English locale for date inputs */
+input[type="date"] {
+    font-family: Arial, sans-serif !important;
+    direction: ltr !important;
+    text-align: left !important;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+    margin-left: 0;
+    margin-right: auto;
+}
+
 /* ===================================
    LAYOUT COMPONENTS
    =================================== */
@@ -851,6 +863,8 @@ body {
 .kpi-card.trainees::before { background: var(--trainees-color); }
 .kpi-card.preparatory::before { background: var(--preparatory-color); }
 .kpi-card.total::before { background: var(--info-color); }
+
+.table-section {
     background: var(--white);
     border-radius: var(--border-radius);
     overflow: hidden;
@@ -1090,6 +1104,10 @@ body {
     font-family: var(--font-primary);
     font-weight: 700;
 }
+
+/* ===================================
+   RESPONSIVE DESIGN
+   =================================== */
 
 /* Tablet Styles */
 @media (max-width: 768px) {
