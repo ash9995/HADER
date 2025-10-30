@@ -26,10 +26,11 @@ const SYSTEM_CONFIG = {
     ],
     
     // Admin credentials (in production, this should be handled server-side)
-    adminCredentials: {
-        USERNAME: 'admin',
-        PASSWORD: 'admin123456'
-    },
+    adminCredentials: [
+        { USERNAME: 'admin', PASSWORD: 'admin123456' },
+        { USERNAME: 'specialist1', PASSWORD: 'spec123' },
+        { USERNAME: 'specialist2', PASSWORD: 'spec456' }
+    ],
  
     
     // User data storage keys
@@ -233,6 +234,12 @@ function setupEventListeners() {
     document.getElementById('export-kpi-excel-btn')?.addEventListener('click', exportKPIToExcel);
     document.getElementById('export-kpi-pdf-btn')?.addEventListener('click', exportKPIToPDF);
     
+    // Import button listeners
+    document.getElementById('import-csv-btn')?.addEventListener('click', () => {
+        document.getElementById('csv-file-input').click();
+    });
+    document.getElementById('csv-file-input')?.addEventListener('change', handleFileUpload);
+    
     console.log('🔗 Event listeners setup completed');
 }
 
@@ -425,9 +432,12 @@ function handleAdminLoginSubmission(event) {
         const USERNAME = document.getElementById('admin-USERNAME').value;
         const PASSWORD = document.getElementById('admin-PASSWORD').value;
         
-        // Check credentials
-        if (USERNAME === SYSTEM_CONFIG.adminCredentials.USERNAME && 
-            PASSWORD === SYSTEM_CONFIG.adminCredentials.PASSWORD) {
+        // Check credentials against the array
+        const validUser = SYSTEM_CONFIG.adminCredentials.find(cred => 
+            cred.USERNAME === USERNAME && cred.PASSWORD === PASSWORD
+        );
+        
+        if (validUser) {
             
             hideForm('admin-login'); // Hide the login modal
             
@@ -615,7 +625,8 @@ function createAttendanceRecord(formData) {
         nationalId: formData.nationalId || "",
         checkIn: getCurrentDateTime(),
         checkOut: null,
-        notes: ""
+        notes: "",
+        isImported: false // Default flag for new check-ins
     };
 }
 
@@ -642,6 +653,13 @@ function updateCategoryKPIs() {
     const volunteersData = filteredData.filter(r => r.type === 'متطوع');
     const volunteersStats = calculateCategoryStats(volunteersData, 'متطوع');
     
+    console.log('📊 Volunteers Stats:', {
+        sessions: volunteersStats.totalSessions,
+        days: volunteersStats.uniqueDays,
+        hours: volunteersStats.totalHours,
+        hoursFormatted: volunteersStats.totalHours.toFixed(1)
+    });
+    
     updateKPIElement('volunteers-sessions', volunteersStats.totalSessions);
     updateKPIElement('volunteers-total-days', volunteersStats.uniqueDays);
     updateKPIElement('volunteers-total-hours', volunteersStats.totalHours.toFixed(1));
@@ -650,6 +668,13 @@ function updateCategoryKPIs() {
     const traineesData = filteredData.filter(r => r.type === 'متدرب');
     const traineesStats = calculateCategoryStats(traineesData, 'متدرب');
     
+    console.log('📊 Trainees Stats:', {
+        sessions: traineesStats.totalSessions,
+        days: traineesStats.uniqueDays,
+        hours: traineesStats.totalHours,
+        hoursFormatted: traineesStats.totalHours.toFixed(1)
+    });
+    
     updateKPIElement('trainees-sessions', traineesStats.totalSessions);
     updateKPIElement('trainees-total-days', traineesStats.uniqueDays);
     updateKPIElement('trainees-total-hours', traineesStats.totalHours.toFixed(1));
@@ -657,6 +682,13 @@ function updateCategoryKPIs() {
     // Calculate preparatory KPIs
     const preparatoryData = filteredData.filter(r => r.type === 'تمهير');
     const preparatoryStats = calculateCategoryStats(preparatoryData, 'تمهير');
+    
+    console.log('📊 Preparatory Stats:', {
+        sessions: preparatoryStats.totalSessions,
+        days: preparatoryStats.uniqueDays,
+        hours: preparatoryStats.totalHours,
+        hoursFormatted: preparatoryStats.totalHours.toFixed(1)
+    });
     
     updateKPIElement('preparatory-sessions', preparatoryStats.totalSessions);
     updateKPIElement('preparatory-total-days', preparatoryStats.uniqueDays);
@@ -717,6 +749,9 @@ function updateKPIElement(elementId, value) {
     const element = document.getElementById(elementId);
     if (element) {
         element.textContent = value;
+        console.log(`✏️ Updated ${elementId} = ${value}`);
+    } else {
+        console.warn(`⚠️ Element not found: ${elementId}`);
     }
 }
 
@@ -731,12 +766,19 @@ function updateKPIElement(elementId, value) {
  */
 function calculateTotalHours(records) {
     const completedRecords = records.filter(r => r.checkOut);
+    
+    console.log(`📊 Calculating hours for ${completedRecords.length} completed records out of ${records.length} total`);
+    
     const totalHours = completedRecords.reduce((sum, record) => {
-        // Re-using the utility function to calculate hours difference
-        return sum + calculateSessionHoursRaw(record.checkIn, record.checkOut); 
+        const hours = calculateSessionHoursRaw(record.checkIn, record.checkOut);
+        console.log(`  ➜ Record ${record.id}: ${record.name} - ${hours.toFixed(2)} hours`);
+        return sum + hours; 
     }, 0);
     
-    return Math.round(totalHours);
+    console.log(`📊 Total hours calculated: ${totalHours.toFixed(2)}`);
+    
+    // Return as decimal, don't round to integer
+    return totalHours;
 }
 
 /**
@@ -820,6 +862,18 @@ function updateAttendanceTable() {
         displayData = filteredData.filter(record => record.type === categoryFilter);
     }
     
+    // Show imported data when any filter is active
+    const cityFilter = document.getElementById('city-filter')?.value || 'all';
+    const phoneFilter = document.getElementById('phone-filter')?.value.trim() || '';
+    const dateFrom = document.getElementById('date-from')?.value || '';
+    const dateTo = document.getElementById('date-to')?.value || '';
+    const isFilterActive = cityFilter !== 'all' || phoneFilter || dateFrom || dateTo;
+
+    // Only hide imported data if NO filters are active (showing all data)
+    if (!isFilterActive) {
+        displayData = displayData.filter(record => !record.isImported);
+    }
+    
     const tableBody = document.querySelector('#attendance-table tbody');
     if (!tableBody) return;
     
@@ -844,11 +898,20 @@ function updateAttendanceTable() {
 function createTableRow(record) {
     const row = document.createElement('tr');
     
+    // Add special styling for imported records
+    if (record.isImported) {
+        row.style.backgroundColor = '#f0f9ff'; // Light blue background
+        row.style.borderLeft = '3px solid #546B68'; // Accent border
+    }
+    
     const opportunityCell = record.type === 'متطوع' ? (record.opportunity || '—') : '—';
     const nationalIdCell = record.type === 'متطوع' ? (record.nationalId || '—') : '—';
     
+    // Add import indicator icon for imported records
+    const importIndicator = record.isImported ? '<i class="fas fa-file-import" style="color: #546B68; margin-left: 5px;" title="مستورد من ملف"></i>' : '';
+    
     row.innerHTML = `
-        <td>${record.city}</td>
+        <td>${record.city}${importIndicator}</td>
         <td>${record.name}</td>
         <td>${record.phone}</td>
         <td>${nationalIdCell}</td> 
@@ -856,7 +919,7 @@ function createTableRow(record) {
         <td>${opportunityCell}</td>
         <td>${formatDate(record.checkIn)}</td>
         <td>${formatTime(record.checkIn)}</td>
-        <td>${record.checkOut ? formatDate(record.checkOut) : 'لم يخرج بعد'}</td>
+        <td>${record.checkOut ? formatDate(record.checkOut) : '—'}</td>
         <td>${record.checkOut ? formatTime(record.checkOut) : '—'}</td>
         <td>${calculateDuration(record.checkIn, record.checkOut)}</td>
         <td contenteditable="true" onfocusout="updateNotes(${record.id}, this.textContent)">${record.notes || ''}</td>
@@ -1086,6 +1149,410 @@ function showLoading(show) {
         } else {
             spinner.classList.remove('active');
         }
+    }
+}
+
+/* ===============================================
+   IMPORT FUNCTIONS (NEW & UPDATED)
+   =============================================== */
+
+/**
+ * Handle CSV or XLSX file import
+ * @param {Event} event - File input change event
+ */
+function handleFileUpload(event) {
+    const file = event.target.files[0];
+    if (!file) {
+        return;
+    }
+
+    // Check if a city is selected
+    const selectedCityFilter = document.getElementById('city-filter')?.value;
+    if (!selectedCityFilter || selectedCityFilter === 'all') {
+        showAlert('الرجاء اختيار فرع محدد من الفلاتر قبل استيراد الملف', 'error');
+        event.target.value = null; // Reset file input
+        return;
+    }
+
+    showLoading(true);
+    
+    const reader = new FileReader();
+    const fileExtension = file.name.split('.').pop().toLowerCase();
+
+    reader.onload = function(e) {
+        try {
+            let dataArray;
+            if (fileExtension === 'csv') {
+                dataArray = parseCSV(e.target.result);
+            } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
+                // Both XLSX and XLS are handled by the same function
+                dataArray = parseXLSX(e.target.result);
+            } else {
+                throw new Error('Unsupported file type');
+            }
+            
+            processDataArray(dataArray, selectedCityFilter);
+
+        } catch (error) {
+            console.error('❌ Error processing file:', error);
+            showAlert('حدث خطأ أثناء معالجة الملف: ' + error.message, 'error');
+        } finally {
+            showLoading(false);
+            event.target.value = null; // Reset file input
+        }
+    };
+    
+    reader.onerror = function() {
+        console.error('❌ Error reading file');
+        showAlert('لا يمكن قراءة الملف', 'error');
+        showLoading(false);
+        event.target.value = null; // Reset file input
+    };
+
+    // Read file based on its type
+    if (fileExtension === 'csv') {
+        reader.readAsText(file, 'UTF-8');
+    } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
+        reader.readAsArrayBuffer(file);
+    } else {
+        showAlert('نوع ملف غير مدعوم. الرجاء تحميل ملف .csv أو .xlsx أو .xls', 'error');
+        showLoading(false);
+        event.target.value = null; // Reset file input
+    }
+}
+
+/**
+ * Parses CSV content into an array of arrays
+ * @param {string} csvContent - The CSV file content as a string
+ * @returns {Array<Array<string>>} Array of rows, where each row is an array of cells
+ */
+function parseCSV(csvContent) {
+    // Simple parser, still vulnerable to commas inside quoted fields
+    const lines = csvContent.split(/\r?\n/);
+    return lines.map(line => line.split(',').map(cell => cell.trim().replace(/"/g, '')));
+}
+
+/**
+ * FIXED: Parses XLSX ArrayBuffer into an array of arrays
+ * @param {ArrayBuffer} dataBuffer - The XLSX file content as an ArrayBuffer
+ * @returns {Array<Array<string>>} Array of rows, where each row is an array of cells
+ */
+function parseXLSX(dataBuffer) {
+    // MODIFIED: Added { cellDates: true } to parse dates as JS Date objects
+    const workbook = XLSX.read(dataBuffer, { type: 'buffer', cellDates: true });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    // header: 1 makes it an array of arrays. defval: "" handles empty cells.
+    const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+    
+    // Trim strings, but leave Date objects and numbers as-is
+    return data.map(row => 
+        row.map(cell => (typeof cell === 'string') ? cell.trim() : cell)
+    );
+}
+
+
+/**
+ * Process imported data (from CSV or XLSX) and add to attendanceData
+ * @param {Array<Array<string>>} dataArray - Array of rows
+ * @param {string} city - The city to associate records with
+ */
+function processDataArray(dataArray, city) {
+    if (dataArray.length < 2) {
+        showAlert('الملف فارغ أو لا يحتوي على صفوف بيانات', 'error');
+        return;
+    }
+            
+    const newRecords = [];
+    let nextId = attendanceData.length > 0 ? Math.max(...attendanceData.map(r => r.id)) + 1 : 1;
+
+    // Step 1: Process Header Row
+    const headerRow = dataArray[0];
+    // Standardize headers: trim and convert to lowercase for matching
+    const headers = headerRow.map(cell => String(cell).trim().toLowerCase()); 
+
+    // Step 2: Define required columns (Arabic and English)
+    const columnMapping = {
+        name: ['الاسم', 'name'],
+        phone: ['رقم الجوال', 'phone', 'رقم جوال'],
+        nationalId: ['رقم الهوية الوطنية', 'nationalid', 'رقم الهوية', 'هوية وطنية'],
+        type: ['النوع', 'type', 'نوع'],
+        opportunity: ['الفرصة التطوعية', 'opportunity', 'فرصة تطوعية', 'الفرصة'],
+        date: ['التاريخ', 'date', 'تاريخ'],
+        time: ['الساعة', 'time', 'وقت', 'ساعة'],
+        duration: ['المدة', 'duration', 'مدة', 'الساعات', 'hours']
+    };
+
+    const indices = {};
+    const missing = [];
+
+    // Step 3: Find column indices by matching Arabic or English headers
+    for (const key in columnMapping) {
+        const possibleHeaders = columnMapping[key];
+        let index = -1;
+        
+        for (const header of possibleHeaders) {
+            index = headers.indexOf(header);
+            if (index !== -1) break;
+        }
+        
+        indices[key] = index;
+        
+        // Mark as missing only if truly required
+        // Required: name, phone, date
+        // Optional: nationalId, opportunity, type, time, duration
+        if (index === -1 && !['nationalId', 'opportunity', 'type', 'time', 'duration'].includes(key)) {
+            missing.push(possibleHeaders[0]); // Use Arabic name for error message
+        }
+    }
+
+    // Step 4: Validate if all required headers were found
+    if (missing.length > 0) {
+        showAlert(`الملف المستورد يفتقد الأعمدة المطلوبة: ${missing.join('، ')}`, 'error');
+        console.error('Missing CSV/XLSX headers:', missing);
+        return;
+    }
+
+    // Step 5: Process data rows (start from i = 1)
+    for (let i = 1; i < dataArray.length; i++) {
+        const columns = dataArray[i];
+        
+        if (columns.length === 0 || columns.every(cell => cell === "" || cell === null || cell === undefined)) {
+            continue; // Skip completely empty rows
+        }
+        
+        // Step 6: Extract data using the mapped indices
+        const name = String(columns[indices.name] || '').trim();
+        const phone = String(columns[indices.phone] || '').trim();
+        const nationalId = indices.nationalId !== -1 ? String(columns[indices.nationalId] || '').trim() : '';
+        const type = indices.type !== -1 ? String(columns[indices.type] || '').trim() : 'متطوع';
+        const opportunity = indices.opportunity !== -1 ? String(columns[indices.opportunity] || '').trim() : '';
+        const date = columns[indices.date]; // Keep as number, string, or Date
+        const time = indices.time !== -1 ? columns[indices.time] : null; // Keep as number, string, or Date
+        const duration = indices.duration !== -1 ? columns[indices.duration] : null; // Duration in hours
+        
+        // Basic validation - require name, phone, date
+        // Either time OR duration should exist
+        if (!name || !phone || !date) {
+            console.warn('⚠️ Skipping incomplete line (missing required data):', {
+                row: i + 1, 
+                name, 
+                phone, 
+                date
+            });
+            continue;
+        }
+        
+        // Parse duration (المدة) - actual hours from file
+        let durationHours = 8; // Default fallback
+        if (duration !== null && duration !== undefined && duration !== '') {
+            const parsedDuration = parseFloat(String(duration));
+            if (!isNaN(parsedDuration) && parsedDuration > 0) {
+                durationHours = parsedDuration;
+            }
+        }
+        
+        // Create check-in datetime
+        let checkInDateTime;
+        if (time !== null && time !== undefined && time !== '') {
+            // If time exists, combine date and time
+            checkInDateTime = combineDateAndTime(date, time);
+        } else {
+            // If no time, use date at 08:00 AM as default
+            checkInDateTime = combineDateAndTime(date, 8);
+        }
+        
+        if (!checkInDateTime) {
+            console.warn('⚠️ Skipping line with invalid date/time:', {
+                row: i + 1,
+                date, 
+                time
+            });
+            continue;
+        }
+        
+        // Calculate checkout time using actual duration from file
+        const checkInDate = new Date(checkInDateTime);
+        const checkOutDate = new Date(checkInDate.getTime() + (durationHours * 60 * 60 * 1000));
+        const checkOutDateTime = checkOutDate.toISOString();
+        
+        const newRecord = {
+            id: nextId++,
+            city: city,
+            name: name,
+            phone: phone,
+            type: type, // Now reads from file or defaults to متطوع
+            opportunity: opportunity || 'غير محدد',
+            nationalId: nationalId || '',
+            checkIn: checkInDateTime,
+            checkOut: checkOutDateTime, // Calculated using actual duration
+            notes: `تم الاستيراد من ملف (${durationHours} ساعة)`,
+            isImported: true // Flag for imported records
+        };
+        
+        newRecords.push(newRecord);
+        console.log(`✅ Imported record ${newRecords.length}:`, {
+            name: newRecord.name,
+            phone: newRecord.phone,
+            type: newRecord.type,
+            duration: durationHours,
+            checkIn: newRecord.checkIn,
+            checkOut: newRecord.checkOut
+        });
+    }
+    
+    if (newRecords.length > 0) {
+        attendanceData.push(...newRecords);
+        saveApplicationData();
+        
+        // Log detailed import statistics
+        const importStats = {
+            totalRecords: newRecords.length,
+            byType: {},
+            uniqueDates: new Set(),
+            totalHours: 0
+        };
+        
+        newRecords.forEach(record => {
+            importStats.byType[record.type] = (importStats.byType[record.type] || 0) + 1;
+            importStats.uniqueDates.add(getLocalDateString(record.checkIn));
+            // Calculate hours for this record
+            const hours = calculateSessionHoursRaw(record.checkIn, record.checkOut);
+            importStats.totalHours += hours;
+        });
+        
+        console.log('📊 Import Statistics:', {
+            totalRecords: importStats.totalRecords,
+            byType: importStats.byType,
+            uniqueDays: importStats.uniqueDates.size,
+            totalHours: importStats.totalHours.toFixed(1),
+            dates: Array.from(importStats.uniqueDates)
+        });
+        
+        updateDashboard();
+        showAlert(`✅ تم استيراد ${newRecords.length} سجل بنجاح (${importStats.totalHours.toFixed(1)} ساعة)`, 'success');
+        console.log(`IMPORT: Added ${newRecords.length} records with ${importStats.totalHours.toFixed(1)} total hours`);
+    } else {
+        showAlert('لم يتم العثور على بيانات صالحة في الملف. تأكد من أن الصفوف تحتوي على البيانات المطلوبة (الاسم، رقم الجوال، التاريخ) وأن التواريخ بالتنسيق الصحيح.', 'error');
+    }
+}
+
+/**
+ * Converts Arabic-Indic or Eastern Arabic-Indic numerals to standard (0-9) digits
+ * @param {string} str - String containing numerals
+ * @returns {string} String with standard digits
+ */
+function toGregorianNumber(str) {
+    if (typeof str !== 'string') return str;
+    const arabicIndic = /[\u0660-\u0669]/g; // ٠١٢٣٤٥٦٧٨٩
+    const eastArabicIndic = /[\u06F0-\u06F9]/g; // ۰۱۲۳۴۵۶۷۸۹ (Persian, Urdu)
+    
+    return str.replace(arabicIndic, (c) => c.charCodeAt(0) - 0x0660)
+              .replace(eastArabicIndic, (c) => c.charCodeAt(0) - 0x06F0);
+}
+
+
+/**
+ * FIXED: Helper to combine date and time into an ISO string
+ * @param {string|number|Date} dateInput - Date (string, Excel number, or JS Date)
+ * @param {string|number|Date} timeInput - Time (string, Excel number, or JS Date)
+ * @returns {string|null} ISO string or null if invalid
+ */
+function combineDateAndTime(dateInput, timeInput) {
+    try {
+        let dateObj;
+
+        // --- 0. Convert Arabic numerals (for CSV/string fallback) ---
+        if (typeof dateInput === 'string') dateInput = toGregorianNumber(dateInput);
+        if (typeof timeInput === 'string') timeInput = toGregorianNumber(timeInput);
+
+        // --- 1. Handle Date Input ---
+        if (dateInput instanceof Date) {
+            // BEST CASE: XLSX gave us a real Date object
+            dateObj = new Date(dateInput.getTime()); // Clone it
+        } else if (typeof dateInput === 'number') {
+            // Excel serial date (from CSV or non-cellDates XLSX)
+            if (dateInput > 25568) {
+                dateObj = new Date(Math.round((dateInput - 25569) * 86400 * 1000));
+                dateObj = new Date(dateObj.getTime() + (dateObj.getTimezoneOffset() * 60000));
+            } else { throw new Error('Invalid Excel date number'); }
+        } else if (typeof dateInput === 'string') {
+            // String date (from CSV or formatted XLSX)
+            if (/^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
+                dateObj = new Date(dateInput + "T00:00:00");
+            } else if (/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(dateInput)) {
+                const parts = dateInput.split('/');
+                dateObj = new Date(parts[2], parts[1] - 1, parts[0]); // DD/MM/YYYY
+            } else { dateObj = new Date(dateInput); }
+        } else { throw new Error('Unrecognized date type'); }
+
+        if (isNaN(dateObj.getTime())) throw new Error('Failed to parse date input');
+
+        // Reset time part of the parsed date
+        dateObj.setHours(0, 0, 0, 0);
+
+        // --- 2. Handle Time Input ---
+        let hours = 0, minutes = 0;
+
+        if (timeInput instanceof Date) {
+            // BEST CASE: XLSX gave us a real Date object
+            hours = timeInput.getHours();
+            minutes = timeInput.getMinutes();
+        } else if (typeof timeInput === 'number') {
+            // Check if it's a simple hour number (1-24) or Excel time fraction
+            if (timeInput >= 1 && timeInput <= 24 && Number.isInteger(timeInput)) {
+                // Simple hour number like 1, 2, 3... 24
+                hours = timeInput;
+                minutes = 0;
+            } else if (timeInput >= 0 && timeInput <= 1) {
+                // Excel time (fraction of a day)
+                const totalSeconds = Math.round(timeInput * 86400);
+                hours = Math.floor(totalSeconds / 3600);
+                minutes = Math.floor((totalSeconds % 3600) / 60);
+            } else {
+                throw new Error('Invalid time number');
+            }
+        } else if (typeof timeInput === 'string') {
+            // String time (from CSV or formatted XLSX)
+            
+            // FIXED: Regex now supports 'م' and 'ص'
+            const timeMatch = timeInput.match(/^(\d{1,2}):(\d{2})(:(\d{2}))?(\s*(AM|PM|ص|م))?$/i);
+            
+            if (timeMatch) {
+                hours = parseInt(timeMatch[1], 10);
+                minutes = parseInt(timeMatch[2], 10);
+                
+                const ampm = timeMatch[6];
+                if (ampm) {
+                    // FIXED: Logic now supports Arabic 'م' and 'ص'
+                    const isPM = ampm.toLowerCase() === 'pm' || ampm === 'م';
+                    const isAM = ampm.toLowerCase() === 'am' || ampm === 'ص';
+                    
+                    if (isPM && hours < 12) hours += 12;
+                    if (isAM && hours === 12) hours = 0; // Midnight
+                }
+            } else { 
+                // Try to parse as a simple number
+                const simpleHour = parseInt(timeInput, 10);
+                if (!isNaN(simpleHour) && simpleHour >= 0 && simpleHour <= 24) {
+                    hours = simpleHour;
+                    minutes = 0;
+                } else {
+                    throw new Error('Unrecognized time format string');
+                }
+            }
+        } else { throw new Error('Unrecognized time type'); }
+
+        // --- 3. Combine Date and Time ---
+        dateObj.setHours(hours, minutes);
+
+        if (isNaN(dateObj.getTime())) throw new Error('Invalid final date/time object');
+        
+        return dateObj.toISOString();
+        
+    } catch (error) {
+        console.error('Error combining date and time:', { dateInput, timeInput, error: error.message });
+        return null;
     }
 }
 
