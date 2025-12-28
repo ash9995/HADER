@@ -27,8 +27,8 @@ const SYSTEM_CONFIG = {
     
     // Admin credentials (in production, this should be handled server-side)
     adminCredentials: [
-        { USERNAME: 'admin', PASSWORD: 'admin123456' },
-        { USERNAME: 'specialist1', PASSWORD: 'spec123' },
+        { USERNAME: 'admin', PASSWORD: 'admin@123' },
+        { USERNAME: 'thurya', PASSWORD: 'thurya123' },
         { USERNAME: 'specialist2', PASSWORD: 'spec456' }
     ],
  
