@@ -81,8 +81,14 @@
                 </div>
 
 <div class="form-group" id="national-id-group" style="display: none;">
-    <label for="national-id">رقم الهوية الوطنية</label>
-    <input type="text" id="national-id" name="national-id" placeholder=" (10 أرقام)" pattern="^1\d{9}$">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <label for="national-id" id="national-id-label">رقم الهوية الوطنية</label>
+        <div style="font-size: 0.9rem;">
+            <input type="checkbox" id="is-non-saudi" onchange="toggleIdType()">
+            <label for="is-non-saudi" style="display: inline; cursor: pointer;">غير سعودي</label>
+        </div>
+    </div>
+    <input type="text" id="national-id" name="national-id" placeholder=" (10 أرقام)" pattern="\d+">
 </div>
                 
                 <button type="submit" class="btn btn-submit">

@@ -289,6 +289,25 @@ function handleUserTypeChange() {
     }
 }
 
+/**
+ * دالة تبديل نوع الهوية (سعودي / غير سعودي)
+ */
+function toggleIdType() {
+    const isNonSaudi = document.getElementById('is-non-saudi').checked;
+    const label = document.getElementById('national-id-label');
+    const input = document.getElementById('national-id');
+
+    if (isNonSaudi) {
+        label.textContent = 'رقم الإقامة / جواز السفر';
+        input.placeholder = 'أدخل رقم الإقامة أو الجواز';
+        input.removeAttribute('pattern'); // إزالة شرط الـ 10 أرقام
+    } else {
+        label.textContent = 'رقم الهوية الوطنية';
+        input.placeholder = ' (10 أرقام)';
+        input.setAttribute('pattern', '^1\\d{9}$');
+    }
+}
+
 /* ===============================================
    FORM MANAGEMENT FUNCTIONS
    =============================================== */
@@ -338,6 +357,13 @@ function hideForm(formType) {
             const nationalIdInput = document.getElementById('national-id');
             if (nationalIdGroup) nationalIdGroup.style.display = 'none';
             if (nationalIdInput) nationalIdInput.required = false;
+            
+            // Reset Non-Saudi checkbox UI
+            const isNonSaudi = document.getElementById('is-non-saudi');
+            if (isNonSaudi) {
+                isNonSaudi.checked = false;
+                toggleIdType(); // Reset label to default
+            }
         }
         
         console.log('❌ Form closed:', formType);
@@ -393,8 +419,6 @@ function handleCheckInSubmission(event) {
             showLoading(false);
             return;
         }
-        
-        // REMOVED: Check for existing check-in - Now allows multiple check-ins per day
         
         // Save user for future reference (trainees and preparatory only)
         if (formData.type === 'متدرب' || formData.type === 'تمهير') {
@@ -530,10 +554,6 @@ function getCheckInFormData() {
     };
 }
 
-/**
- * REMOVED: hasExistingCheckIn function - No longer needed
- * The system now allows multiple check-ins per day
- */
 
 /**
  * Find active attendance record for today (most recent without checkout)
@@ -562,7 +582,7 @@ function findActiveRecord(phone) {
 }
 
 /**
- * Validate check-in data
+ * Validate check-in data (تم التحديث لدعم غير السعوديين)
  * @param {Object} data - Form data to validate
  * @returns {Object} Validation result
  */
@@ -577,11 +597,22 @@ function validateCheckInData(data) {
             return { isValid: false, message: 'الرجاء اختيار مسمى الفرصة التطوعية' };
         }
         if (!data.nationalId) {
-            return { isValid: false, message: 'الرجاء إدخال رقم الهوية الوطنية للمتطوع' };
+            return { isValid: false, message: 'الرجاء إدخال رقم الهوية/الإقامة' };
         }
-        // Validate National ID format (10 digits, starts with 1)
-        if (!/^1\d{9}$/.test(data.nationalId)) {
-            return { isValid: false, message: 'رقم الهوية الوطنية يجب أن يتكون من 10 أرقام ويبدأ بالرقم 1' };
+        
+        // التحقق بناءً على الجنسية
+        const isNonSaudi = document.getElementById('is-non-saudi').checked;
+        
+        if (!isNonSaudi) {
+            // للسعوديين: يجب أن يكون 10 أرقام ويبدأ بـ 1
+            if (!/^1\d{9}$/.test(data.nationalId)) {
+                return { isValid: false, message: 'رقم الهوية الوطنية يجب أن يتكون من 10 أرقام ويبدأ بالرقم 1' };
+            }
+        } else {
+            // لغير السعوديين (إقامة/جواز)
+            if (data.nationalId.length < 5) {
+                return { isValid: false, message: 'الرجاء إدخال رقم إثبات صحيح' };
+            }
         }
     }
     
@@ -653,13 +684,6 @@ function updateCategoryKPIs() {
     const volunteersData = filteredData.filter(r => r.type === 'متطوع');
     const volunteersStats = calculateCategoryStats(volunteersData, 'متطوع');
     
-    console.log('📊 Volunteers Stats:', {
-        sessions: volunteersStats.totalSessions,
-        days: volunteersStats.uniqueDays,
-        hours: volunteersStats.totalHours,
-        hoursFormatted: volunteersStats.totalHours.toFixed(1)
-    });
-    
     updateKPIElement('volunteers-sessions', volunteersStats.totalSessions);
     updateKPIElement('volunteers-total-days', volunteersStats.uniqueDays);
     updateKPIElement('volunteers-total-hours', volunteersStats.totalHours.toFixed(1));
@@ -668,13 +692,6 @@ function updateCategoryKPIs() {
     const traineesData = filteredData.filter(r => r.type === 'متدرب');
     const traineesStats = calculateCategoryStats(traineesData, 'متدرب');
     
-    console.log('📊 Trainees Stats:', {
-        sessions: traineesStats.totalSessions,
-        days: traineesStats.uniqueDays,
-        hours: traineesStats.totalHours,
-        hoursFormatted: traineesStats.totalHours.toFixed(1)
-    });
-    
     updateKPIElement('trainees-sessions', traineesStats.totalSessions);
     updateKPIElement('trainees-total-days', traineesStats.uniqueDays);
     updateKPIElement('trainees-total-hours', traineesStats.totalHours.toFixed(1));
@@ -682,13 +699,6 @@ function updateCategoryKPIs() {
     // Calculate preparatory KPIs
     const preparatoryData = filteredData.filter(r => r.type === 'تمهير');
     const preparatoryStats = calculateCategoryStats(preparatoryData, 'تمهير');
-    
-    console.log('📊 Preparatory Stats:', {
-        sessions: preparatoryStats.totalSessions,
-        days: preparatoryStats.uniqueDays,
-        hours: preparatoryStats.totalHours,
-        hoursFormatted: preparatoryStats.totalHours.toFixed(1)
-    });
     
     updateKPIElement('preparatory-sessions', preparatoryStats.totalSessions);
     updateKPIElement('preparatory-total-days', preparatoryStats.uniqueDays);
@@ -749,9 +759,6 @@ function updateKPIElement(elementId, value) {
     const element = document.getElementById(elementId);
     if (element) {
         element.textContent = value;
-        console.log(`✏️ Updated ${elementId} = ${value}`);
-    } else {
-        console.warn(`⚠️ Element not found: ${elementId}`);
     }
 }
 
@@ -767,15 +774,10 @@ function updateKPIElement(elementId, value) {
 function calculateTotalHours(records) {
     const completedRecords = records.filter(r => r.checkOut);
     
-    console.log(`📊 Calculating hours for ${completedRecords.length} completed records out of ${records.length} total`);
-    
     const totalHours = completedRecords.reduce((sum, record) => {
         const hours = calculateSessionHoursRaw(record.checkIn, record.checkOut);
-        console.log(`  ➜ Record ${record.id}: ${record.name} - ${hours.toFixed(2)} hours`);
         return sum + hours; 
     }, 0);
-    
-    console.log(`📊 Total hours calculated: ${totalHours.toFixed(2)}`);
     
     // Return as decimal, don't round to integer
     return totalHours;
@@ -1558,11 +1560,11 @@ function combineDateAndTime(dateInput, timeInput) {
 
 
 /* ===============================================
-   EXPORT FUNCTIONS
+   EXPORT FUNCTIONS (UPDATED FOR XLSX)
    =============================================== */
 
 /**
- * Export data to Excel (CSV format) with filters applied
+ * Export data to Excel (.xlsx) using SheetJS (UPDATED)
  */
 function exportToExcel() {
     showLoading(true);
@@ -1576,11 +1578,10 @@ function exportToExcel() {
             exportData = filteredData.filter(record => record.type === categoryFilter);
         }
         
-        // Create CSV header with separate date and time columns
-        const header = ['الفرع', 'الاسم', 'رقم الجوال', 'رقم الهوية الوطنية', 'النوع', 'الفرصة التطوعية', 'تاريخ الدخول', 'وقت الدخول', 'تاريخ الخروج', 'وقت الخروج', 'المدة', 'ملاحظات'];
+        // 1. Prepare data rows
+        const header = ['الفرع', 'الاسم', 'رقم الجوال', 'رقم الهوية/الإقامة', 'النوع', 'الفرصة التطوعية', 'تاريخ الدخول', 'وقت الدخول', 'تاريخ الخروج', 'وقت الخروج', 'المدة', 'ملاحظات'];
         
-        // Create CSV rows
-        const rows = exportData.map(record => [
+        const dataRows = exportData.map(record => [
             record.city,
             record.name,
             record.phone,
@@ -1594,15 +1595,27 @@ function exportToExcel() {
             calculateDuration(record.checkIn, record.checkOut),
             record.notes || ''
         ]);
+
+        const workSheetData = [header, ...dataRows];
+
+        // 2. Create Workbook and Worksheet
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(workSheetData);
+
+        // Column widths for better formatting
+        ws['!cols'] = [
+            {wch: 10}, {wch: 20}, {wch: 15}, {wch: 15}, 
+            {wch: 10}, {wch: 20}, {wch: 15}, {wch: 10}, 
+            {wch: 15}, {wch: 10}, {wch: 15}, {wch: 30}
+        ];
+
+        // 3. Append Sheet
+        XLSX.utils.book_append_sheet(wb, ws, "سجل الحضور");
+
+        // 4. Write File (XLSX)
+        XLSX.writeFile(wb, `Attendance_Data_${new Date().toISOString().split('T')[0]}.xlsx`);
         
-        // Combine header and rows
-        const csvContent = [header, ...rows]
-            .map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(','))
-            .join('\n');
-        
-        // Download file
-        downloadCSVFile(csvContent, 'attendance_data');
-        showAlert('تم تصدير البيانات بنجاح');
+        showAlert('تم تصدير ملف Excel بنجاح');
     } catch (error) {
         console.error('❌ Export error:', error);
         showAlert('حدث خطأ في تصدير البيانات', 'error');
